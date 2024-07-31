@@ -1,8 +1,10 @@
 const express = require("express");
 const session = require('express-session');
+const session = require('express-session');
 const { Client } = require("pg");
 const app = express();
 const port = 3000;
+const path = require('path');
 
 // Create a new PostgreSQL client
 const client = new Client({
