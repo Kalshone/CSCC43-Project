@@ -1,7 +1,9 @@
 const express = require("express");
+const session = require('express-session');
 const { Client } = require("pg");
 const app = express();
 const port = 3000;
+const path = require('path');
 
 // Create a new PostgreSQL client
 const client = new Client({
@@ -11,6 +13,14 @@ const client = new Client({
   password: "123",
   port: 5432,
 });
+
+// Set up session middleware
+app.use(session({
+  secret: 'your_secret_key',
+  resave: false,
+  saveUninitialized: true,
+  cookie: { secure: false } // Set to true if using HTTPS
+}));
 
 // Connect to the database
 client.connect((err) => {
@@ -43,7 +53,7 @@ client.connect((err) => {
         console.error('Error executing query', err);
         res.status(500).send('Error signing up');
       } else {
-        res.redirect(`/dashboard`);
+        res.redirect(`/dashboard/{email}`);
       }
     });
   });
@@ -64,14 +74,19 @@ client.connect((err) => {
       } else if (result.rows.length === 0) {
         res.status(401).send('Invalid email or password');
       } else {
-        res.redirect('/dashboard');
+        req.session.user = result.rows[0];
+        res.redirect(`/dashboard/${email}`);
       }
     });
   });
 
   // dashboard page
-  app.get("/dashboard", (req, res) => {
-    res.sendFile(__dirname + "/dashboard.html");
+  app.get("/dashboard/:email", (req, res) => {
+    if (req.session.user && req.session.user.email === req.params.email) {
+      res.sendFile(__dirname + '/dashboard.html');
+    } else {
+      res.status(401).send('Unauthorized');
+    }
   });
 
   // see reviews
@@ -82,11 +97,24 @@ client.connect((err) => {
         console.error('Error executing query', err);
         res.status(500).send('Error getting reviews');
       } else {
-        res.json(result.rows);
+        res.sendFile(path.join(__dirname, 'views', 'reviews.html'), { reviews: result.rows });
       }
     });
   });
 
+  // // friends page
+  // app.get('/friends', (req, res) => {
+  //   res.sendFile(__dirname + '/friends.html');
+  // });
+
+  app.get('/friends', (req, res) => {
+    if (req.session.user) {
+      res.sendFile(path.join(__dirname, 'public', 'friends.html'));
+    } else {
+      res.status(401).send('Unauthorized');
+    }
+  });
+  
   //logout
   app.get('/logout', (req, res) => {
     res.redirect('/');
