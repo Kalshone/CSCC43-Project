@@ -24,15 +24,17 @@
       }
       button {
         background-color: #4CAF50;
+        font-size: 16px;
         color: white;
+        padding: 10px;
         border: none;
         border-radius: 4px;
         cursor: pointer;
       }
-      .form-section input,
-      .form-section button {
+      .form-section input {
         padding: 10px;
         margin: 5px 0;
+        font-size: 16px;
       }
       .list-section ul {
         list-style: none;
@@ -42,6 +44,11 @@
         background: #eee;
         margin: 5px 0;
         padding: 10px;
+      }
+      .pending-request-buttons {
+        display: inline-flex;
+        gap: 5px;
+        margin-left: 10px;
       }
     </style>
   </head>
@@ -135,6 +142,8 @@
         .then(response => response.json())
         .then(data => {
           console.log('Friend request sent:', data);
+          fetchFriendsList(); // Reload friends list
+          fetchPendingRequests();
         })
         .catch(error => console.error('Error sending friend request:', error));
       }
@@ -151,6 +160,9 @@
               const requestorName = document.createElement('span');
               requestorName.textContent = `${request.requestername} (${request.requestemail}) wants to be your friend`;
 
+              const buttonContainer = document.createElement('div');
+              buttonContainer.classList.add('pending-request-buttons');
+
               const acceptButton = document.createElement('button');
               acceptButton.textContent = 'Accept';
               acceptButton.onclick = () => acceptFriendRequest(request.requestemail);
@@ -159,9 +171,11 @@
               declineButton.textContent = 'Decline';
               declineButton.onclick = () => declineFriendRequest(request.requestemail);
 
+              buttonContainer.appendChild(acceptButton);
+              buttonContainer.appendChild(declineButton);
+
               listItem.appendChild(requestorName);
-              listItem.appendChild(acceptButton);
-              listItem.appendChild(declineButton);
+              listItem.appendChild(buttonContainer);
               pendingRequestsEl.appendChild(listItem);
             });
           })
