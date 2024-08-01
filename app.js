@@ -123,6 +123,11 @@ client.connect((err) => {
     }
   });
 
+  // portfolio page
+  app.get("/portfolio-page", (req, res) => {
+      res.sendFile(__dirname + '/portfolio-page.html');
+  });
+  
   //logout
   app.get('/logout', (req, res) => {
     res.redirect('/');
