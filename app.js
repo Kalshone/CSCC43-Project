@@ -3,6 +3,7 @@ const session = require("express-session");
 const { Client } = require("pg");
 const app = express();
 const port = 3000;
+const path = require('path');
 
 // Create a new PostgreSQL client
 const client = new Client({
@@ -265,6 +266,19 @@ client.connect((err) => {
     }
   });
 
+  // // friends page
+  // app.get('/friends', (req, res) => {
+  //   res.sendFile(__dirname + '/friends.html');
+  // });
+
+  app.get('/friends', (req, res) => {
+    if (req.session.user) {
+      res.sendFile(path.join(__dirname, 'public', 'friends.html'));
+    } else {
+      res.status(401).send('Unauthorized');
+    }
+  });
+  
   //logout
   app.get("/logout", (req, res) => {
     res.redirect("/");

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Reviews</title>
+  <style>
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 8px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+  </style>
+</head>
+<body>
+  <h1>Reviews</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Product</th>
+        <th>Rating</th>
+        <th>Comment</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% for (let i = 0; i < reviews.length; i++) { %>
+      <tr>
+        <td><%= reviews[i].id %></td>
+        <td><%= reviews[i].product %></td>
+        <td><%= reviews[i].rating %></td>
+        <td><%= reviews[i].comment %></td>
+      </tr>
+      <% } %>
+    </tbody>
+  </table>
+</body>
+</html>
