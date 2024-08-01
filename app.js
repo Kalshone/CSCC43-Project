@@ -1,4 +1,5 @@
 const express = require("express");
+const session = require('express-session');
 const { Client } = require("pg");
 const app = express();
 const port = 3000;
@@ -11,6 +12,16 @@ const client = new Client({
   password: "123",
   port: 5432,
 });
+
+// Middleware setup
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(session({
+  secret: 'your-secret-key', // Replace with a strong secret key
+  resave: false,
+  saveUninitialized: true,
+  cookie: { secure: false } // Set to true if using HTTPS
+}));
 
 // Connect to the database
 client.connect((err) => {
@@ -43,6 +54,9 @@ client.connect((err) => {
         console.error('Error executing query', err);
         res.status(500).send('Error signing up');
       } else {
+        req.session.user = {
+          email: result.rows[0].email,
+        };
         res.redirect(`/dashboard`);
       }
     });
@@ -64,7 +78,9 @@ client.connect((err) => {
       } else if (result.rows.length === 0) {
         res.status(401).send('Invalid email or password');
       } else {
-        req.session.user = result.rows[0];
+        req.session.user = {
+          email: result.rows[0].email,
+        };
         res.redirect(`/dashboard`);
       }
     });
@@ -81,15 +97,19 @@ client.connect((err) => {
 
   // see reviews
   app.get('/reviews', (req, res) => {
-    const query = 'SELECT * FROM Reviews';
-    client.query(query, (err, result) => {
-      if (err) {
-        console.error('Error executing query', err);
-        res.status(500).send('Error getting reviews');
-      } else {
-        res.json(result.rows);
-      }
-    });
+    if (req.session.user) {
+      const query = 'SELECT * FROM Reviews';
+      client.query(query, (err, result) => {
+        if (err) {
+          console.error('Error executing query', err);
+          res.status(500).send('Error getting reviews');
+        } else {
+          res.json(result.rows);
+        }
+      });
+    } else {
+      res.redirect('/');
+    }
   });
 
   app.get('/friends', (req, res) => {
@@ -104,6 +124,15 @@ client.connect((err) => {
   //logout
   app.get('/logout', (req, res) => {
     res.redirect('/');
+  });
+  
+  // API endpoint to get session data
+  app.get('/api/session', (req, res) => {
+    if (req.session.user) {
+      res.json({ user: req.session.user });
+    } else {
+      res.status(401).send('Unauthorized');
+    }
   });
 
   app.listen(port, () => {
