@@ -99,23 +99,6 @@ client.connect((err) => {
     }
   });
 
-  // see reviews
-  app.get('/reviews', (req, res) => {
-    if (req.session.user) {
-      const query = 'SELECT * FROM Reviews';
-      client.query(query, (err, result) => {
-        if (err) {
-          console.error('Error executing query', err);
-          res.status(500).send('Error getting reviews');
-        } else {
-          res.json(result.rows);
-        }
-      });
-    } else {
-      res.redirect('/');
-    }
-  });
-
   app.get('/friends', (req, res) => {
     if (req.session.user) {
       const email = req.session.user;
@@ -328,20 +311,59 @@ app.get('/api/stocklist/:id', (req, res) => {
     if (req.session.user) {
       const { receiveemail } = req.body;
       const senderemail = req.session.user.email;
-
-      const query = `
-        INSERT INTO FriendRequests (requestemail, receiveemail, status)
-        VALUES ($1, $2, 'Pending')
-        ON CONFLICT (requestemail, receiveemail) DO NOTHING
+  
+      const checkReciprocalQuery = `
+        SELECT * FROM FriendRequests
+        WHERE requestemail = $1 AND receiveemail = $2 AND status = 'Pending'
       `;
-
-      client.query(query, [senderemail, receiveemail], (err, result) => {
+  
+      client.query(checkReciprocalQuery, [receiveemail, senderemail], (err, result) => {
         if (err) {
-          console.log("the result of the query is ", result);
-          console.error('Error sending friend request:', err);
+          console.error('Error checking reciprocal friend request:', err);
           res.status(500).send('Internal Server Error');
+        } else if (result.rows.length > 0) {
+          // Reciprocal friend request exists
+          const addFriendsQuery = `
+            INSERT INTO Friends (email1, email2)
+            VALUES ($1, $2)
+          `;
+  
+          const deleteRequestsQuery = `
+            DELETE FROM FriendRequests
+            WHERE (requestemail = $1 AND receiveemail = $2) OR (requestemail = $2 AND receiveemail = $1)
+          `;
+  
+          client.query(addFriendsQuery, [senderemail, receiveemail], (err) => {
+            if (err) {
+              console.error('Error adding friends:', err);
+              res.status(500).send('Internal Server Error');
+            } else {
+              client.query(deleteRequestsQuery, [senderemail, receiveemail], (err) => {
+                if (err) {
+                  console.error('Error deleting friend requests:', err);
+                  res.status(500).send('Internal Server Error');
+                } else {
+                  res.json({ message: 'Friend request accepted and both users added as friends' });
+                }
+              });
+            }
+          });
         } else {
-          res.json({ message: 'Friend request sent' });
+          // No reciprocal friend request, insert new friend request
+          const insertRequestQuery = `
+            INSERT INTO FriendRequests (requestemail, receiveemail, status)
+            VALUES ($1, $2, 'Pending')
+            ON CONFLICT (requestemail, receiveemail) DO NOTHING
+          `;
+  
+          client.query(insertRequestQuery, [senderemail, receiveemail], (err) => {
+            if (err) {
+              console.error('Error sending friend request:', err);
+              res.status(500).send('Internal Server Error');
+            } else {
+              res.json({ message: 'Friend request sent' });
+            }
+          });
         }
       });
     } else {

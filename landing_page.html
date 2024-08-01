@@ -10,19 +10,26 @@
     }
     button {
       background-color: #4CAF50;
+      font-size: 16px;
       color: white;
-      padding: 10px 20px;
+      padding: 10px;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      margin: 10px;
+    }
+    .section {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-bottom: 20px;
     }
   </style>
 </head>
 <body>
   <h1>Trading Platform</h1>
-  <p>Welcome to the trading platform. Please choose an option:</p>
-  <button onclick="window.location.href='/login'">Login</button>
-  <button onclick="window.location.href='/signup'">Signup</button>
+  <div class="section">
+    <p>Welcome to the trading platform. Please choose an option:</p>
+    <button onclick="window.location.href='/login'">Login</button>
+    <button onclick="window.location.href='/signup'">Signup</button>
+  </div>
 </body>
 </html>
