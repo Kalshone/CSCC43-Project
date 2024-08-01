@@ -21,11 +21,12 @@
     <p><strong>ID:</strong> <span id="stocklist-id"></span></p>
     <p><strong>Name:</strong> <span id="stocklist-name-detail"></span></p>
     <p><strong>Visibility:</strong></p>
-    <input type="radio" id="public" name="visibility" value="Public">
+    <input type="radio" id="public" name="visibility" value="Public" disabled>
     <label for="public">Public</label>
-    <input type="radio" id="private" name="visibility" value="Private">
+    <input type="radio" id="private" name="visibility" value="Private" disabled>
     <label for="private">Private</label>
   </div>
+
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const urlParams = new URLSearchParams(window.location.search);
@@ -49,28 +50,37 @@
               } else {
                 document.getElementById('private').checked = true;
               }
-              document.querySelectorAll('input[name="visibility"]').forEach(radio => {
-                radio.addEventListener('change', function() {
-                  const selectedVisibility = this.value === 'Public';
-                  fetch(`/api/stocklist/${stocklistId}/visibility`, {
-                    method: 'PUT',
-                    headers: {
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ isPublic: selectedVisibility })
-                  })
-                  .then(response => {
-                    if (!response.ok) {
-                      throw new Error('Network response was not ok');
-                    }
-                    return response.json();
-                  })
-                  .then(updateData => {
-                    console.log('Visibility updated successfully:', updateData);
-                  })
-                  .catch(error => console.error('Error updating visibility:', error));
-                });
-              });
+              fetch('/api/session')
+                .then(response => response.json())
+                .then(sessionData => {
+                  if (sessionData.user.email === data.owner) {
+                    document.getElementById('public').disabled = false;
+                    document.getElementById('private').disabled = false;
+                    document.querySelectorAll('input[name="visibility"]').forEach(radio => {
+                      radio.addEventListener('change', function() {
+                        const selectedVisibility = this.value === 'Public';
+                        fetch(`/api/stocklist/${stocklistId}/visibility`, {
+                          method: 'PUT',
+                          headers: {
+                            'Content-Type': 'application/json'
+                          },
+                          body: JSON.stringify({ isPublic: selectedVisibility })
+                        })
+                        .then(response => {
+                          if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                          }
+                          return response.json();
+                        })
+                        .then(updateData => {
+                          console.log('Visibility updated successfully:', updateData);
+                        })
+                        .catch(error => console.error('Error updating visibility:', error));
+                      });
+                    });
+                  }
+                })
+                .catch(error => console.error('Error fetching session data:', error));
             } else {
               console.error('No data returned for stocklist details.');
             }

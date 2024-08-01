@@ -288,7 +288,7 @@ app.get('/api/stocklist/:id', (req, res) => {
     return res.status(400).send('Invalid stocklist ID');
   }
 
-  const query = 'SELECT * FROM Stocklists WHERE stocklistid = $1';
+  const query = 'SELECT stocklistid, name, email AS owner, isPublic FROM Stocklists WHERE stocklistid = $1';
   client.query(query, [stocklistId], (err, result) => {
     if (err) {
       console.error('Error executing query', err);
@@ -300,6 +300,26 @@ app.get('/api/stocklist/:id', (req, res) => {
     }
   });
 });
+
+  // stocklist explore page
+  app.get("/stocklists-explore", (req, res) => {
+    res.sendFile(__dirname + '/stocklists-explore.html');
+  });
+
+  // Fetch all public stocklists
+app.get('/api/public-stocklists', (req, res) => {
+  const query = 'SELECT stocklistid, name FROM Stocklists WHERE isPublic = true';
+  
+  client.query(query, (err, result) => {
+    if (err) {
+      console.error('Error fetching public stocklists:', err);
+      res.status(500).send('Error fetching public stocklists');
+    } else {
+      res.json(result.rows);
+    }
+  });
+});
+
 
   app.get("/reviews", (req, res) => {
     if (req.session.user) {

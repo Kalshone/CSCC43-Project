@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Explore Stocklists</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+    }
+    ul li a {
+      color: #4CAF50;
+    }
+  </style>
+</head>
+<body>
+  <h1>Explore Stocklists</h1>
+    <ul id="public-stocklist-list"></ul>
+    </ul>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      fetch('/api/public-stocklists')
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Network response was not ok');
+          }
+          return response.json();
+        })
+        .then(data => {
+          const stocklistContainer = document.getElementById('public-stocklist-list');
+          if (data.length === 0) {
+            stocklistContainer.innerHTML = '<p>No public stocklists available.</p>';
+          } else {
+            data.forEach(stocklist => {
+              const li = document.createElement('li');
+              const a = document.createElement('a');
+              a.href = `/stocklist-page?id=${stocklist.stocklistid}`;
+              a.textContent = stocklist.name || 'Unnamed Stocklist';
+              li.appendChild(a);
+              stocklistContainer.appendChild(li);
+            });
+          }
+        })
+        .catch(error => console.error('Error fetching public stocklists:', error));
+    });
+  </script>
+</body>
+</html>
