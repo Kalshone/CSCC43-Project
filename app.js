@@ -156,17 +156,18 @@ client.connect((err) => {
 
   app.post('/api/friend-request', (req, res) => {
     if (req.session.user) {
-      const { receiverEmail } = req.body;
-      const senderEmail = req.session.user.email;
+      const { receiveemail } = req.body;
+      const senderemail = req.session.user.email;
 
       const query = `
-        INSERT INTO FriendRequests (requestEmail, receiveEmail, status)
+        INSERT INTO FriendRequests (requestemail, receiveemail, status)
         VALUES ($1, $2, 'Pending')
         ON CONFLICT (requestemail, receiveemail) DO NOTHING
       `;
 
-      client.query(query, [senderEmail, receiverEmail], (err, result) => {
+      client.query(query, [senderemail, receiveemail], (err, result) => {
         if (err) {
+          console.log("the result of the query is ", result);
           console.error('Error sending friend request:', err);
           res.status(500).send('Internal Server Error');
         } else {
