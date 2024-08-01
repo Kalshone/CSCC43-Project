@@ -141,22 +141,22 @@ client.connect((err) => {
   });
 
   // fetch portfolios for user
-app.get('/api/portfolios', (req, res) => {
-  if (req.session.user) {
-    const email = req.session.user.email;
-    const query = 'SELECT * FROM Portfolios WHERE email = $1';
-    client.query(query, [email], (err, result) => {
-      if (err) {
-        console.error('Error executing query', err);
-        res.status(500).send('Error fetching portfolios');
-      } else {
-        res.json(result.rows);
-      }
-    });
-  } else {
-    res.status(401).send('Unauthorized');
-  }
-});
+  app.get('/api/portfolios', (req, res) => {
+    if (req.session.user) {
+      const email = req.session.user.email;
+      const query = 'SELECT * FROM Portfolios WHERE email = $1';
+      client.query(query, [email], (err, result) => {
+        if (err) {
+          console.error('Error executing query', err);
+          res.status(500).send('Error fetching portfolios');
+        } else {
+          res.json(result.rows);
+        }
+      });
+    } else {
+      res.status(401).send('Unauthorized');
+    }
+  });
 
   // fetch portfolio details by id
   app.get('/api/portfolio/:id', (req, res) => {
@@ -190,74 +190,180 @@ app.get('/api/portfolios', (req, res) => {
     res.sendFile(__dirname + '/add-stocklist-page.html');
   });
 
-// add stocklist process
-app.post('/add-stocklist', (req, res) => {
-  if (req.session.user) {
-    const email = req.session.user.email;
-    const name = req.body.stocklistName;
-    const isPublic = false;
-    
-    const query = 'INSERT INTO Stocklists (email, name, isPublic) VALUES ($1, $2, $3) RETURNING stocklistid';
-    
-    client.query(query, [email, name, isPublic], (err, result) => {
-      if (err) {
-        console.error('Error executing query', err);
-        res.status(500).send('Error adding stocklist');
-      } else {
-        const newStocklist = result.rows[0];
-        res.redirect(`/stocklist-page?id=${newStocklist.stocklistid}`);
-      }
-    });
-  } else {
-    res.redirect('/login');
-  }
-});
-
-
-// fetch user's stocklists
-app.get('/api/stocklists', (req, res) => {
-  if (req.session.user) {
-    const email = req.session.user.email;
-    const query = 'SELECT * FROM Stocklists WHERE email = $1';
-    client.query(query, [email], (err, result) => {
-      if (err) {
-        console.error('Error executing query', err);
-        res.status(500).send('Error fetching stocklists');
-      } else {
-        res.json(result.rows);
-      }
-    });
-  } else {
-    res.status(401).send('Unauthorized');
-  }
-});
-
-// fetch stocklist details by id
-app.get('/api/stocklist/:id', (req, res) => {
-  const stocklistId = parseInt(req.params.id, 10);
-
-  if (isNaN(stocklistId)) {
-    return res.status(400).send('Invalid stocklist ID');
-  }
-
-  const query = 'SELECT * FROM Stocklists WHERE stocklistid = $1';
-  client.query(query, [stocklistId], (err, result) => {
-    if (err) {
-      console.error('Error executing query', err);
-      res.status(500).send('Error fetching stocklist details');
-    } else if (result.rows.length === 0) {
-      res.status(404).send('Stocklist not found');
+  // add stocklist process
+  app.post('/add-stocklist', (req, res) => {
+    if (req.session.user) {
+      const email = req.session.user.email;
+      const name = req.body.stocklistName;
+      const isPublic = false;
+      
+      const query = 'INSERT INTO Stocklists (email, name, isPublic) VALUES ($1, $2, $3) RETURNING stocklistid';
+      
+      client.query(query, [email, name, isPublic], (err, result) => {
+        if (err) {
+          console.error('Error executing query', err);
+          res.status(500).send('Error adding stocklist');
+        } else {
+          const newStocklist = result.rows[0];
+          res.redirect(`/stocklist-page?id=${newStocklist.stocklistid}`);
+        }
+      });
     } else {
-      res.json(result.rows[0]);
+      res.redirect('/login');
     }
   });
-});
+
+  // fetch user's stocklists
+  app.get('/api/stocklists', (req, res) => {
+    if (req.session.user) {
+      const email = req.session.user.email;
+      const query = 'SELECT * FROM Stocklists WHERE email = $1';
+      client.query(query, [email], (err, result) => {
+        if (err) {
+          console.error('Error executing query', err);
+          res.status(500).send('Error fetching stocklists');
+        } else {
+          res.json(result.rows);
+        }
+      });
+    } else {
+      res.status(401).send('Unauthorized');
+    }
+  });
+
+  // fetch stocklist details by id
+  app.get('/api/stocklist/:id', (req, res) => {
+    const stocklistId = parseInt(req.params.id, 10);
+
+    if (isNaN(stocklistId)) {
+      return res.status(400).send('Invalid stocklist ID');
+    }
+
+    const query = 'SELECT * FROM Stocklists WHERE stocklistid = $1';
+    client.query(query, [stocklistId], (err, result) => {
+      if (err) {
+        console.error('Error executing query', err);
+        res.status(500).send('Error fetching stocklist details');
+      } else if (result.rows.length === 0) {
+        res.status(404).send('Stocklist not found');
+      } else {
+        res.json(result.rows[0]);
+      }
+    });
+  });
 
   app.get("/reviews", (req, res) => {
     if (req.session.user) {
       res.sendFile(__dirname + "/reviews.html");
     } else {
       res.redirect("/");
+    }
+  });
+
+  // get my reviews:
+  app.get("/api/my-reviews", (req, res) => {
+    if (req.session.user) {
+      const email = req.session.user.email;
+      const query = `
+        SELECT Reviews.reviewID, Reviews.reviewText, Users.name 
+        FROM Reviews 
+        JOIN StockLists ON Reviews.stockListID = StockLists.stockListID 
+        JOIN Users ON StockLists.email = Users.email 
+        WHERE Reviews.email = $1
+      `;
+      client.query(query, [email], (err, result) => {
+        console.log(result.rows);
+        if (err) {
+          console.error('Error executing query', err);
+          res.status(500).send('Error fetching reviews');
+        } else {
+          res.json(result.rows);
+        }
+      });
+    } else {
+      res.status(401).send('Unauthorized');
+    }
+  });
+
+  app.put('/api/reviews/:reviewId', (req, res) => {
+    if (!req.session.user) {
+      return res.status(401).send('Unauthorized');
+    }
+  
+    const reviewId = req.params.reviewId;
+    const { reviewText } = req.body;
+    const email = req.session.user.email;
+  
+    const query = `
+      UPDATE Reviews
+      SET reviewText = $1
+      WHERE reviewID = $2 AND email = $3
+      RETURNING *
+    `;
+  
+    client.query(query, [reviewText, reviewId, email], (err, result) => {
+      if (err) {
+        console.error('Error executing query', err);
+        return res.status(500).send('Error updating review');
+      }
+  
+      if (result.rowCount === 0) {
+        return res.status(404).send('Review not found or not owned by user');
+      }
+  
+      res.json(result.rows[0]);
+    });
+  });
+
+  app.delete('/api/reviews/:reviewId', (req, res) => {
+    if (!req.session.user) {
+      return res.status(401).send('Unauthorized');
+    }
+  
+    const reviewId = req.params.reviewId;
+    const email = req.session.user.email;
+  
+    const query = `
+      DELETE FROM Reviews
+      WHERE reviewID = $1 AND email = $2
+      RETURNING *
+    `;
+  
+    client.query(query, [reviewId, email], (err, result) => {
+      if (err) {
+        console.error('Error executing query', err);
+        return res.status(500).send('Error deleting review');
+      }
+  
+      if (result.rowCount === 0) {
+        return res.status(404).send('Review not found or not owned by user');
+      }
+  
+      res.json(result.rows[0]);
+    });
+  });
+
+  //request a review
+  app.post("/api/request-review", (req, res) => {
+    if (req.session.user) {
+      stockListID = 4;
+      const email = req.body;
+      const reviewText = "";
+      const query = `
+        INSERT INTO Reviews (email, stockListID, reviewText)
+        VALUES ($1, $2, $3)
+        RETURNING *
+      `;
+      client.query(query, [email, stockListID, reviewText], (err, result) => {
+        if (err) {
+          console.error("Error executing query", err);
+          res.status(500).send("Error requesting review");
+        } else {
+          res.json(result.rows[0]);
+        }
+      });
+    } else {
+      res.status(401).send("Unauthorized");
     }
   });
 

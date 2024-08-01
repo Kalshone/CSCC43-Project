@@ -46,6 +46,11 @@
         margin: 5px 0;
         padding: 10px;
       }
+      .editing-buttons {
+        display: inline-flex;
+        gap: 5px;
+        margin-left: 10px;
+      }
     </style>
   </head>
   <body>
@@ -67,22 +72,19 @@
     </div>
 
     <div class="section list-section">
+      <h2>My Requested Reviews</h2>
+      <ul id="requested-reviews-list"></ul>
+    </div>
+
+    <div class="section list-section">
       <h2>My Reviews</h2>
-      <ul id="reviews-list"></ul>
+      <ul id="my-reviews-list"></ul>
     </div>
 
     <script>
       document.addEventListener("DOMContentLoaded", function () {
         // Fetch session data for welcome message
-        fetch("/api/session")
-          .then((response) => response.json())
-          .then((data) => {
-            const welcomeMessage = document.getElementById("welcome-message");
-            welcomeMessage.textContent = `Welcome ${data.user.email}`;
-          })
-          .catch((error) =>
-            console.error("Error fetching session data:", error)
-          );
+        fetchSessionData();
 
         // Fetch user's reviews
         fetchReviews();
@@ -93,45 +95,94 @@
 
         requestReviewButton.addEventListener('click', () => {
           const userEmail = reviewRequestInput.value.trim();
+          const stockListId = 1; // Replace with the appropriate stock list ID
           if (userEmail) {
-            requestReview(userEmail);
+            requestReview(userEmail, stockListId);
             reviewRequestInput.value = '';
           }
         });
       });
 
+      function fetchSessionData() {
+        fetch("/api/session")
+          .then((response) => response.json())
+          .then((data) => {
+            const welcomeMessage = document.getElementById("welcome-message");
+            welcomeMessage.textContent = `Welcome ${data.user.email}`;
+          })
+          .catch((error) =>
+            console.error("Error fetching session data:", error)
+          );
+      }
+
       function fetchReviews() {
         fetch("/api/my-reviews")
           .then((response) => response.json())
           .then((data) => {
-            const reviewsList = document.getElementById("reviews-list");
+            const reviewsList = document.getElementById("my-reviews-list");
             reviewsList.innerHTML = ""; // Clear any existing list items
-            data.reviews.forEach((review) => {
+            data.forEach((review) => {
               const listItem = document.createElement("li");
-              listItem.textContent = `Review for ${review.userEmail}: ${review.content}`;
-              const editButton = document.createElement("button");
-              editButton.textContent = "Edit";
-              editButton.onclick = () => editReview(review.id);
-              const deleteButton = document.createElement("button");
-              deleteButton.textContent = "Delete";
-              deleteButton.onclick = () => deleteReview(review.id);
-              listItem.appendChild(editButton);
-              listItem.appendChild(deleteButton);
-              reviewsList.appendChild(listItem);
+              if (review.reviewtext !== "") {
+                listItem.textContent = `Review for ${review.name}: "${review.reviewtext}"`;
+
+                const buttonContainer = document.createElement('div');
+                buttonContainer.classList.add('editing-buttons');
+
+                const editButton = document.createElement("button");
+                editButton.textContent = "Edit";
+                editButton.onclick = () => editReview(review.reviewid);
+
+                const deleteButton = document.createElement("button");
+                deleteButton.textContent = "Delete";
+                deleteButton.onclick = () => deleteReview(review.reviewid);
+
+                buttonContainer.appendChild(editButton);
+                buttonContainer.appendChild(deleteButton);
+
+                listItem.appendChild(buttonContainer);
+                reviewsList.appendChild(listItem);
+              }
+              
             });
+
+            const reqreviewsList = document.getElementById("requested-reviews-list");
+            reqreviewsList.innerHTML = ""; // Clear any existing list items
+            data.forEach((review) => {
+              const listItem = document.createElement("li");
+              if (review.reviewtext === "") {
+                listItem.textContent = `Review for ${review.name}: Pending...`;
+                const buttonContainer = document.createElement('div');
+                buttonContainer.classList.add('editing-buttons');
+
+                const editButton = document.createElement("button");
+                editButton.textContent = "Add Review";
+                editButton.onclick = () => editReview(review.reviewid);
+
+                const deleteButton = document.createElement("button");
+                deleteButton.textContent = "Decline Review";
+                deleteButton.onclick = () => deleteReview(review.reviewid);
+
+                buttonContainer.appendChild(editButton);
+                buttonContainer.appendChild(deleteButton);
+
+                listItem.appendChild(buttonContainer);
+                reqreviewsList.appendChild(listItem);
+              }
+              
+            });
+
           })
-          .catch((error) =>
-            console.error("Error fetching reviews:", error)
-          );
+          .catch((error) => console.error("Error fetching reviews:", error));
       }
 
-      function requestReview(userEmail) {
+      function requestReview(userEmail, stockListId) {
         fetch("/api/request-review", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ userEmail }),
+          body: JSON.stringify({ email: userEmail, stockListID: stockListId, reviewText: "" }),
         })
           .then((response) => response.json())
           .then((data) => {
@@ -142,13 +193,50 @@
           );
       }
 
-      function editReview(reviewId) {
-        // Implement edit review functionality
+    function editReview(reviewId, currentReviewText) {
+      const newReviewText = prompt("Edit your review:", currentReviewText);
+      if (newReviewText) {
+        // Update the review using the API
+        updateReview(reviewId, newReviewText);
       }
+    }
 
-      function deleteReview(reviewId) {
-        // Implement delete review functionality
-      }
+    function deleteReview(reviewId) {
+      // Delete the review using the API
+      fetch(`/api/reviews/${reviewId}`, {
+        method: "DELETE",
+      })
+        .then((response) => {
+          if (response.ok) {
+            console.log("Review deleted successfully");
+            // Refresh the reviews list
+            fetchReviews();
+          } else {
+            console.error("Error deleting review");
+          }
+        })
+        .catch((error) => console.error("Error deleting review:", error));
+    }
+
+    function updateReview(reviewId, newReviewText) {
+      fetch(`/api/reviews/${reviewId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ reviewText: newReviewText }),
+      })
+        .then((response) => {
+          if (response.ok) {
+            console.log("Review updated successfully");
+            // Refresh the reviews list
+            fetchReviews();
+          } else {
+            console.error("Error updating review");
+          }
+        })
+        .catch((error) => console.error("Error updating review:", error));
+    }
     </script>
   </body>
 </html>
