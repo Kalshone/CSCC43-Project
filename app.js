@@ -127,6 +127,32 @@ client.connect((err) => {
   app.get("/portfolio-page", (req, res) => {
       res.sendFile(__dirname + '/portfolio-page.html');
   });
+
+  // add portfolio page
+  app.get("/add-portfolio-page", (req, res) => {
+    res.sendFile(__dirname + '/add-portfolio-page.html');
+  });
+
+  // add portfolio process
+  app.post('/add-portfolio', (req, res) => {
+    if (req.session.user) {
+      const email = req.session.user;
+      const stockListId = null;
+      const name = req.body.name;
+      const cashbalance = 0;
+      const query = 'INSERT INTO PORTFOLIOS (email, stockListId, name, cashbalance) VALUES ($1, $2, $3, $4) RETURNING name';
+      client.query(query, [email, stockListId, name, cashbalance], (err, result) => {
+        if (err) {
+          console.error('Error executing query', err);
+          res.status(500).send('Error adding portfolio');
+        // } else {
+        //   res.redirect(`/portfolio-page`);
+        }
+      });
+    } else {
+      res.redirect('/');
+    }
+  });
   
   //logout
   app.get('/logout', (req, res) => {
