@@ -1,165 +1,139 @@
-<!-- <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Friends Page</title>
-    <style>
-       body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        .section {
-            border: 1px solid #ccc;
-            padding: 10px;
-            margin-bottom: 20px;
-        }
-        h1 {
-            text-align: center;
-        }
-        .btn-group {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin: 10px;
-        }
-        .btn:hover {
-            background-color: #45a049;
-        }
-    </style>
-</head>
-<body>
-    <h1>Friends Page</h1>
-    <div class="section">
-        <p>Welcome to the friends page. Please choose an option:</p>
-        <p id="welcome-message">Welcome, ${userName}</p>
-        <div class="btn-group">
-            <button onclick="window.location.href='/login'">Login</button>
-            <button onclick="window.location.href='/signup'">Signup</button>
-            <a href="#friend-requests" class="btn">Friend Requests</a>
-            <a href="#send-request" class="btn">Send Request</a>
-            <a href="#friends-list" class="btn">Friends List</a>
-        </div>
-    </div>
-</body>
-</html> -->
-
-
-
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<html>
+  <head>
     <title>Friends Page</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f4f4;
-            color: #333;
-        }
-        .container {
-            width: 80%;
-            margin: auto;
-            overflow: hidden;
-        }
-        header {
-            background: #333;
-            color: #fff;
-            padding-top: 30px;
-            min-height: 70px;
-            border-bottom: #77aaff 3px solid;
-        }
-        header a {
-            color: #fff;
-            text-decoration: none;
-            text-transform: uppercase;
-            font-size: 16px;
-        }
-        header ul {
-            padding: 0;
-            list-style: none;
-        }
-        header li {
-            display: inline;
-            padding: 0 20px 0 20px;
-        }
-        .main {
-            padding: 20px;
-            background: #fff;
-            margin-top: 20px;
-        }
-        .form-section, .list-section {
-            margin-bottom: 20px;
-        }
-        .form-section form {
-            display: flex;
-            flex-direction: column;
-        }
-        .form-section input, .form-section button {
-            padding: 10px;
-            margin: 5px 0;
-        }
-        .list-section ul {
-            list-style: none;
-            padding: 0;
-        }
-        .list-section li {
-            background: #eee;
-            margin: 5px 0;
-            padding: 10px;
-        }
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+      }
+      h1 {
+        text-align: center;
+      }
+      .section {
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin-bottom: 20px;
+      }
+      ul li a {
+        color: #4caf50;
+      }
+      .form-section form {
+        display: flex;
+        flex-direction: column;
+      }
+      .form-section input,
+      .form-section button {
+        padding: 10px;
+        margin: 5px 0;
+      }
+      .list-section ul {
+        list-style: none;
+        padding: 0;
+      }
+      .list-section li {
+        background: #eee;
+        margin: 5px 0;
+        padding: 10px;
+      }
     </style>
-</head>
-<body>
-    <header>
-        <div class="container">
-            <h1>Friends Page</h1>
-            <ul>
-                <li><a href="#friend-requests">Friend Requests</a></li>
-                <li><a href="#send-request">Send Request</a></li>
-                <li><a href="#friends-list">Friends List</a></li>
-            </ul>
-        </div>
-    </header>
+  </head>
+  <body>
+    <h1>Friends Page</h1>
+    <div id="welcome-message">Welcome</div>
 
-    <div class="container main">
-        <section id="friend-requests" class="list-section">
-            <h2>Pending Friend Requests</h2>
-            <ul>
-                <!-- Example of pending requests -->
-                <li>John Doe (john@example.com) wants to be your friend. <button>Accept</button> <button>Decline</button></li>
-                <li>Jane Smith (jane@example.com) wants to be your friend. <button>Accept</button> <button>Decline</button></li>
-            </ul>
-        </section>
-
-        <section id="send-request" class="form-section">
-            <h2>Send a Friend Request</h2>
-            <form action="/send-friend-request" method="post">
-                <input type="email" name="requestEmail" placeholder="Your Email" required>
-                <input type="email" name="receiveEmail" placeholder="Friend's Email" required>
-                <button type="submit">Send Request</button>
-            </form>
-        </section>
-
-        <section id="friends-list" class="list-section">
-            <h2>Friends List</h2>
-            <ul>
-                <!-- Example of friends list -->
-                <li>John Doe (john@example.com)</li>
-                <li>Jane Smith (jane@example.com)</li>
-            </ul>
-        </section>
+    <div class="section">
+      <h2>Pending Friend Requests</h2>
+      <ul>
+        <!-- Example of pending requests -->
+        <li>
+          John Doe (john@example.com) wants to be your friend.
+          <button>Accept</button> <button>Decline</button>
+        </li>
+        <li>
+          Jane Smith (jane@example.com) wants to be your friend.
+          <button>Accept</button> <button>Decline</button>
+        </li>
+      </ul>
     </div>
-</body>
+
+    <div class="section form-section">
+      <h2>Send a Friend Request</h2>
+      <form action="/send-friend-request" method="post">
+        <!-- <input
+          type="email"
+          name="requestEmail"
+          placeholder="Your Email"
+          required
+        /> -->
+        <input
+          type="email"
+          name="receiveEmail"
+          placeholder="Friend's Email"
+          required
+          id="friend-request-input"
+        />
+        <button type="button" id="send-request-button">Send Request</button>
+      </form>
+    </div>
+
+    <div class="section list-section">
+      <h2>Friends List</h2>
+      <ul id="friends-list"></ul>
+    </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        // Fetch session data for welcome message
+        fetch("/api/session")
+          .then((response) => response.json())
+          .then((data) => {
+            const welcomeMessage = document.getElementById("welcome-message");
+            welcomeMessage.textContent = `Welcome ${data.user.email}`;
+          })
+          .catch((error) =>
+            console.error("Error fetching session data:", error)
+          );
+
+        // Fetch friends list
+        fetch("/api/friends-list")
+          .then((response) => response.json())
+          .then((data) => {
+            const friendsList = document.getElementById("friends-list");
+            friendsList.innerHTML = ""; // Clear any existing list items
+            data.friends.forEach((friend) => {
+              const listItem = document.createElement("li");
+              listItem.textContent = `${friend.name} (${friend.friendemail})`;
+              friendsList.appendChild(listItem);
+            });
+          })
+          .catch((error) =>
+            console.error("Error fetching friends list:", error)
+          );
+
+        // Add friend request functionality
+        const friendRequestInput = document.getElementById('friend-request-input');
+        const sendRequestButton = document.getElementById('send-request-button');
+
+        sendRequestButton.addEventListener('click', () => {
+          const receiverEmail = friendRequestInput.value.trim();
+          if (receiverEmail) {
+            fetch('/api/friend-request', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ receiverEmail })
+            })
+            .then(response => response.json())
+            .then(data => {
+              console.log('Friend request sent:', data);
+              friendRequestInput.value = '';
+            })
+            .catch(error => console.error('Error sending friend request:', error));
+          }
+        });
+      });
+    </script>
+  </body>
 </html>
