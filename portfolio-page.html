@@ -2,11 +2,57 @@
 <html>
 <head>
   <title>Portfolio Page</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+    }
+    .portfolio-details {
+      margin-top: 20px;
+    }
+  </style>
 </head>
 <body>
-  <h1>Portfolio Page</h1>
-  <div action="/add-portfolio-page" method="get">
-    
+  <h1 id="portfolio-name">Portfolio Page</h1>
+  <div class="portfolio-details">
+    <p><strong>ID:</strong> <span id="portfolio-id"></span></p>
+    <p><strong>Name:</strong> <span id="portfolio-name-detail"></span></p>
+    <p><strong>Stock List ID:</strong> <span id="stock-list-id"></span></p>
+    <p><strong>Cash Balance:</strong> <span id="cash-balance"></span></p>
   </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const portfolioId = urlParams.get('id');
+
+      if (portfolioId) {
+        fetch(`/api/portfolio/${portfolioId}`)
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            return response.json();
+          })
+          .then(data => {
+            if (data) {
+              document.getElementById('portfolio-name').textContent = data.name || 'Unnamed Portfolio';
+              document.getElementById('portfolio-id').textContent = data.portfolioid || 'N/A';
+              document.getElementById('portfolio-name-detail').textContent = data.name || 'N/A';
+              document.getElementById('stock-list-id').textContent = data.stocklistid || 'N/A';
+              document.getElementById('cash-balance').textContent = data.cashbalance || 'N/A';
+            } else {
+              console.error('No data returned for portfolio details.');
+            }
+          })
+          .catch(error => console.error('Error fetching portfolio details:', error));
+      } else {
+        console.error('No portfolio ID found in the URL.');
+      }
+    });
+  </script>
 </body>
 </html>

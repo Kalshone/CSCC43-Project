@@ -25,8 +25,12 @@
   <p id="welcome-message"> Welcome </p>
   <div class="section">
     <h2>Portfolio</h2>
-    <li><a href="/add-portfolio-page">Add Portfolio</a></li>
-    <li><a href="/portfolio-page">Portfolio Page</a></li>
+    <ul>
+      <li><a href="/add-portfolio-page">Add Portfolio</a></li>
+      <div id="portfolio-list">
+
+      </ul>
+    
     <!-- Add your portfolio information here -->
   </div>
   <div class="section">
@@ -50,6 +54,21 @@
         .then(data => {
           const welcomeMessage = document.getElementById('welcome-message');
           welcomeMessage.textContent = `Welcome ${data.user.email}`;
+
+          fetch('/api/portfolios')
+            .then(response => response.json())
+            .then(portfolios => {
+              const portfolioList = document.getElementById('portfolio-list');
+              portfolios.forEach(portfolio => {
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                a.href = `/portfolio-page?id=${portfolio.portfolioid}`;
+                a.textContent = portfolio.name;
+                li.appendChild(a);
+                portfolioList.appendChild(li);
+              });
+            })
+            .catch(error => console.error('Error fetching portfolios:', error));
         })
         .catch(error => console.error('Error fetching session data:', error));
     });
