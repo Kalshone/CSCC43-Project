@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Friends Page</title>
+    <style>
+       body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .section {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        .btn-group {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        .btn:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>Friends Page</h1>
+    <div class="section">
+        <p>Welcome to the friends page. Please choose an option:</p>
+        <p id="welcome-message">Welcome, ${userName}</p>
+        <div class="btn-group">
+            <button onclick="window.location.href='/login'">Login</button>
+            <button onclick="window.location.href='/signup'">Signup</button>
+            <a href="#friend-requests" class="btn">Friend Requests</a>
+            <a href="#send-request" class="btn">Send Request</a>
+            <a href="#friends-list" class="btn">Friends List</a>
+        </div>
+    </div>
+</body>
+</html>

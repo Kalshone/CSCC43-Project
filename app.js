@@ -64,14 +64,19 @@ client.connect((err) => {
       } else if (result.rows.length === 0) {
         res.status(401).send('Invalid email or password');
       } else {
-        res.redirect('/dashboard');
+        req.session.user = result.rows[0];
+        res.redirect(`/dashboard`);
       }
     });
   });
 
   // dashboard page
-  app.get("/dashboard", (req, res) => {
-    res.sendFile(__dirname + "/dashboard.html");
+  app.get("/dashboard/", (req, res) => {
+    if (req.session.user) {
+      res.sendFile(__dirname + '/dashboard.html');
+    } else {
+      res.redirect('/');
+    }
   });
 
   // see reviews
@@ -85,6 +90,15 @@ client.connect((err) => {
         res.json(result.rows);
       }
     });
+  });
+
+  app.get('/friends', (req, res) => {
+    if (req.session.user) {
+      const email = req.session.user;
+      res.sendFile(__dirname + '/friends.html');
+    } else {
+      res.redirect('/');
+    }
   });
 
   //logout
