@@ -193,6 +193,80 @@ app.get('/api/portfolios', (req, res) => {
     });
   });
 
+
+  // stocklist page
+    app.get("/stocklist-page", (req, res) => {
+      res.sendFile(__dirname + '/stocklist-page.html');
+  });
+
+  // add stocklist page
+  app.get("/add-stocklist-page", (req, res) => {
+    res.sendFile(__dirname + '/add-stocklist-page.html');
+  });
+
+// add stocklist process
+app.post('/add-stocklist', (req, res) => {
+  if (req.session.user) {
+    const email = req.session.user.email;
+    const name = req.body.stocklistName;
+    const isPublic = false;
+    
+    const query = 'INSERT INTO Stocklists (email, name, isPublic) VALUES ($1, $2, $3) RETURNING stocklistid';
+    
+    client.query(query, [email, name, isPublic], (err, result) => {
+      if (err) {
+        console.error('Error executing query', err);
+        res.status(500).send('Error adding stocklist');
+      } else {
+        const newStocklist = result.rows[0];
+        res.redirect(`/stocklist-page?id=${newStocklist.stocklistid}`);
+      }
+    });
+  } else {
+    res.redirect('/login');
+  }
+});
+
+
+// fetch user's stocklists
+app.get('/api/stocklists', (req, res) => {
+  if (req.session.user) {
+    const email = req.session.user.email;
+    const query = 'SELECT * FROM Stocklists WHERE email = $1';
+    client.query(query, [email], (err, result) => {
+      if (err) {
+        console.error('Error executing query', err);
+        res.status(500).send('Error fetching stocklists');
+      } else {
+        res.json(result.rows);
+      }
+    });
+  } else {
+    res.status(401).send('Unauthorized');
+  }
+});
+
+// fetch stocklist details by id
+app.get('/api/stocklist/:id', (req, res) => {
+  const stocklistId = parseInt(req.params.id, 10);
+
+  if (isNaN(stocklistId)) {
+    return res.status(400).send('Invalid stocklist ID');
+  }
+
+  const query = 'SELECT * FROM Stocklists WHERE stocklistid = $1';
+  client.query(query, [stocklistId], (err, result) => {
+    if (err) {
+      console.error('Error executing query', err);
+      res.status(500).send('Error fetching stocklist details');
+    } else if (result.rows.length === 0) {
+      res.status(404).send('Stocklist not found');
+    } else {
+      res.json(result.rows[0]);
+    }
+  });
+});
+
   
   //logout
   app.get('/logout', (req, res) => {
