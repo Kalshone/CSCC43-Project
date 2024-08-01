@@ -176,6 +176,95 @@ client.connect((err) => {
     }
   });
 
+  app.get("/api/pending-requests", (req, res) => {
+    if (req.session.user) {
+      const email = req.session.user.email;
+  
+      const query = `
+        SELECT requestEmail, Users.name AS requesterName
+        FROM FriendRequests
+        JOIN Users ON FriendRequests.requestEmail = Users.email
+        WHERE FriendRequests.receiveEmail = $1 AND FriendRequests.status = 'Pending'
+      `;
+
+      client.query(query, [email], (err, results) => {
+        if (err) {
+          console.error("Error fetching pending requests:", err);
+          res.status(500).send("Internal Server Error");
+        } else {
+          console.log("Pending requests fetched:", results.rows);
+          res.json({
+            requests: results.rows,
+          });
+        }
+      });
+    } else {
+      res.status(401).send("Unauthorized");
+    }
+  });
+  
+  app.post("/api/accept-request", (req, res) => {
+    if (req.session.user) {
+      const { requestEmail } = req.body;
+      const receiverEmail = req.session.user.email;
+      
+      // Delete the friend request from FriendRequests
+      const deleteQuery = `
+        DELETE FROM FriendRequests
+        WHERE requestEmail = $1 AND receiveEmail = $2
+      `;
+      
+      // Insert the emails into the Friends table
+      const insertQuery = `
+        INSERT INTO Friends (email1, email2)
+        VALUES ($1, $2)
+      `;
+      
+      client.query(deleteQuery, [requestEmail, receiverEmail], (err, results) => {
+        if (err) {
+          console.error("Error deleting friend request:", err);
+          res.status(500).send("Internal Server Error");
+        } else {
+          client.query(insertQuery, [requestEmail, receiverEmail], (err, results) => {
+            if (err) {
+              console.error("Error inserting into Friends table:", err);
+              res.status(500).send("Internal Server Error");
+            } else {
+              res.json({ message: "Friend request accepted and added to Friends list" });
+            }
+          });
+        }
+      });
+
+    } else {
+      res.status(401).send("Unauthorized");
+    }
+  });
+  
+  app.post("/api/decline-request", (req, res) => {
+    if (req.session.user) {
+      const { requestEmail } = req.body;
+      const receiverEmail = req.session.user.email;
+  
+      const query = `
+        UPDATE FriendRequests
+        SET status = 'declined'
+        WHERE requestEmail = $1 AND receiveEmail = $2
+      `;
+  
+      client.query(query, [requestEmail, receiverEmail], (err, results) => {
+        if (err) {
+          console.error("Error declining friend request:", err);
+          res.status(500).send("Internal Server Error");
+        } else {
+          res.json({ message: "Friend request declined" });
+        }
+      });
+    } else {
+      res.status(401).send("Unauthorized");
+    }
+  });
+
   //logout
   app.get("/logout", (req, res) => {
     res.redirect("/");
