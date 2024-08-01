@@ -13,6 +13,9 @@
     .portfolio-details {
       margin-top: 20px;
     }
+    .add-cash {
+      margin-top: 20px;
+    }
   </style>
 </head>
 <body>
@@ -22,6 +25,12 @@
     <p><strong>Name:</strong> <span id="portfolio-name-detail"></span></p>
     <p><strong>Stock List ID:</strong> <span id="stock-list-id"></span></p>
     <p><strong>Cash Balance:</strong> <span id="cash-balance"></span></p>
+  </div>
+
+  <div class="add-cash">
+    <h3>Add Cash to Portfolio</h3>
+    <input type="number" id="cash-amount" placeholder="Enter amount">
+    <button id="add-cash-button">Add</button>
   </div>
 
   <script>
@@ -52,6 +61,34 @@
       } else {
         console.error('No portfolio ID found in the URL.');
       }
+
+      document.getElementById('add-cash-button').addEventListener('click', function() {
+        const cashAmountInput = document.getElementById('cash-amount');
+        const cashAmount = parseFloat(cashAmountInput.value);
+        if (!isNaN(cashAmount) && cashAmount > 0) {
+          fetch(`/api/portfolio/${portfolioId}/add-cash`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ amount: cashAmount })
+          })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            return response.json();
+          })
+          .then(data => {
+            console.log('Cash added successfully:', data);
+            document.getElementById('cash-balance').textContent = data.newCashBalance;
+            cashAmountInput.value = '';
+          })
+          .catch(error => console.error('Error adding cash to portfolio:', error));
+        } else {
+          alert('Please enter a valid cash amount.');
+        }
+      });
     });
   </script>
 </body>
