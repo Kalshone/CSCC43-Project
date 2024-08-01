@@ -1,6 +1,5 @@
 const express = require("express");
 const session = require('express-session');
-const session = require('express-session');
 const { Client } = require("pg");
 const app = express();
 const port = 3000;
@@ -136,9 +135,9 @@ client.connect((err) => {
   // add portfolio process
   app.post('/add-portfolio', (req, res) => {
     if (req.session.user) {
-      const email = req.session.user;
+      const email = req.session.user.email;
       const stockListId = null;
-      const name = req.body.name;
+      const name = req.body.portfolioName;
       const cashbalance = 0;
       const query = 'INSERT INTO PORTFOLIOS (email, stockListId, name, cashbalance) VALUES ($1, $2, $3, $4) RETURNING name';
       client.query(query, [email, stockListId, name, cashbalance], (err, result) => {
