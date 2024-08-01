@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Stocklist Page</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+    }
+    .stocklist-details {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1 id="stocklist-name">Stocklist Page</h1>
+  <div class="stocklist-details">
+    <p><strong>ID:</strong> <span id="stocklist-id"></span></p>
+    <p><strong>Name:</strong> <span id="stocklist-name-detail"></span></p>
+    <p><strong>Is Public:</strong> <span id="is-public"></span></p>
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const stocklistId = urlParams.get('id');
+
+      if (stocklistId) {
+        fetch(`/api/stocklist/${stocklistId}`)
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            return response.json();
+          })
+          .then(data => {
+            if (data) {
+              document.getElementById('stocklist-name').textContent = data.name || 'Unnamed Stocklist';
+              document.getElementById('stocklist-id').textContent = data.stocklistid || 'N/A';
+              document.getElementById('stocklist-name-detail').textContent = data.name || 'N/A';
+              document.getElementById('is-public').textContent = data.ispublic ? 'Yes' : 'No';
+            } else {
+              console.error('No data returned for stocklist details.');
+            }
+          })
+          .catch(error => console.error('Error fetching stocklist details:', error));
+      } else {
+        console.error('No stocklist ID found in the URL.');
+      }
+    });
+  </script>
+</body>
+</html>
