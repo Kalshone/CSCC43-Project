@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Stocks Page</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+    }
+    .section {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-bottom: 20px;
+    }
+    ul li a {
+      color: #4caf50;
+    }
+    .form-section form {
+      display: flex;
+      flex-direction: column;
+    }
+    .form-section input, .form-section button {
+      padding: 10px;
+      margin: 5px 0;
+    }
+    .list-section ul {
+      list-style: none;
+      padding: 0;
+    }
+    .list-section li {
+      background: #eee;
+      margin: 5px 0;
+      padding: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Stocks Page</h1>
+  <div id="welcome-message">Welcome</div>
+
+  <div class="section form-section">
+    <h2>Add New Stock</h2>
+    <form action="/add-stock" method="post">
+      <input type="text" name="stockSymbol" placeholder="Stock Symbol (3 characters)" maxlength="3" required id="stock-symbol-input" />
+      <input type="text" name="companyName" placeholder="Company Name" required id="company-name-input" />
+      <button type="button" id="add-stock-button">Add Stock</button>
+    </form>
+  </div>
+
+  <div class="section list-section">
+    <h2>Market Stocks (all stocks on the market - click on one to add to your held stocks)</h2>
+    <ul id="market-stocks"></ul>
+  </div>
+
+  <div class="section list-section">
+    <h2>Stocks Held (all stocks you have - click on one to add t oa stock list through dropdown)</h2>
+    <ul id="stocks-held"></ul>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      // Fetch session data for welcome message
+      fetch("/api/session")
+        .then((response) => response.json())
+        .then((data) => {
+          const welcomeMessage = document.getElementById("welcome-message");
+          welcomeMessage.textContent = `Welcome ${data.user.email}`;
+        })
+        .catch((error) => console.error("Error fetching session data:", error));
+
+      // Fetch market stocks
+      fetchMarketStocks();
+
+      // Fetch stocks held
+      fetchStocksHeld();
+
+      // Fetch stock list
+      fetchStockList();
+
+      // Add new stock functionality
+      const stockSymbolInput = document.getElementById('stock-symbol-input');
+      const companyNameInput = document.getElementById('company-name-input');
+      const addStockButton = document.getElementById('add-stock-button');
+      addStockButton.addEventListener('click', () => {
+        const stockSymbol = stockSymbolInput.value.trim().toUpperCase();
+        const companyName = companyNameInput.value.trim();
+        if (stockSymbol && companyName && stockSymbol.length === 3) {
+          addNewStock(stockSymbol, companyName);
+          stockSymbolInput.value = '';
+          companyNameInput.value = '';
+        }
+      });
+    });
+
+    function fetchMarketStocks() {
+      fetch("/api/market-stocks")
+        .then((response) => response.json())
+        .then((data) => {
+          const marketStocksEl = document.getElementById('market-stocks');
+          marketStocksEl.innerHTML = '';
+          data.stocks.forEach(stock => {
+            const listItem = document.createElement('li');
+            const stockSymbol = document.createElement('span');
+            stockSymbol.textContent = stock.symbol;
+            const companyName = document.createElement('span');
+            companyName.textContent = stock.company;
+            const addButton = document.createElement('button');
+            addButton.textContent = 'Add to Stocks Held';
+            addButton.onclick = () => addStockToHeld(stock.symbol);
+            listItem.appendChild(stockSymbol);
+            listItem.appendChild(companyName);
+            listItem.appendChild(addButton);
+            marketStocksEl.appendChild(listItem);
+          });
+        })
+        .catch(error => console.error("Error fetching market stocks:", error));
+    }
+
+    function fetchStocksHeld() {
+      fetch("/api/stocks-held")
+        .then((response) => response.json())
+        .then((data) => {
+          const stocksHeldEl = document.getElementById('stocks-held');
+          stocksHeldEl.innerHTML = '';
+          data.stocks.forEach(stock => {
+            const listItem = document.createElement('li');
+            const stockSymbol = document.createElement('span');
+            stockSymbol.textContent = stock.symbol;
+            const companyName = document.createElement('span');
+            companyName.textContent = stock.company;
+            const addToListButton = document.createElement('button');
+            addToListButton.textContent = 'Add to Stock List';
+            addToListButton.onclick = () => addStockToList(stock.symbol);
+            listItem.appendChild(stockSymbol);
+            listItem.appendChild(companyName);
+            listItem.appendChild(addToListButton);
+            stocksHeldEl.appendChild(listItem);
+          });
+        })
+        .catch(error => console.error("Error fetching stocks held:", error));
+    }
+
+    function fetchStockList() {
+      fetch("/api/stock-list")
+        .then((response) => response.json())
+        .then((data) => {
+          const stockListEl = document.getElementById('stock-list');
+          stockListEl.innerHTML = '';
+          data.stocks.forEach(stock => {
+            const listItem = document.createElement('li');
+            const stockSymbol = document.createElement('span');
+            stockSymbol.textContent = stock.symbol;
+            const companyName = document.createElement('span');
+            companyName.textContent = stock.company;
+            listItem.appendChild(stockSymbol);
+            listItem.appendChild(companyName);
+            stockListEl.appendChild(listItem);
+          });
+        })
+        .catch(error => console.error("Error fetching stock list:", error));
+    }
+
+    function addNewStock(stockSymbol, companyName) {
+      fetch('/api/add-stock', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ stockSymbol, companyName })
+      })
+        .then(response => response.json())
+        .then(data => {
+          console.log('New stock added:', data);
+          fetchMarketStocks();
+        })
+        .catch(error => console.error('Error adding new stock:', error));
+    }
+
+    function addStockToHeld(stockSymbol) {
+      fetch('/api/add-to-held', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ stockSymbol })
+      })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Stock added to Stocks Held:', data);
+          fetchStocksHeld();
+          fetchMarketStocks();
+        })
+        .catch(error => console.error('Error adding stock to Stocks Held:', error));
+    }
+
+    function addStockToList(stockSymbol) {
+      fetch('/api/add-to-list', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ stockSymbol })
+      })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Stock added to Stock List:', data);
+          fetchStockList();
+          fetchStocksHeld();
+        })
+        .catch(error => console.error('Error adding stock to Stock List:', error));
+    }
+  </script>
+</body>
+</html>
