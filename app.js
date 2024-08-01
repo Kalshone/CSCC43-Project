@@ -190,15 +190,13 @@ app.get('/api/portfolios', (req, res) => {
     res.sendFile(__dirname + '/add-stocklist-page.html');
   });
 
-// add stocklist process
+// Add stocklist process
 app.post('/add-stocklist', (req, res) => {
   if (req.session.user) {
     const email = req.session.user.email;
     const name = req.body.stocklistName;
-    const isPublic = false;
-    
+    const isPublic = req.body.stocklistVisibility === 'Public';
     const query = 'INSERT INTO Stocklists (email, name, isPublic) VALUES ($1, $2, $3) RETURNING stocklistid';
-    
     client.query(query, [email, name, isPublic], (err, result) => {
       if (err) {
         console.error('Error executing query', err);
@@ -213,6 +211,25 @@ app.post('/add-stocklist', (req, res) => {
   }
 });
 
+// update stocklist visibility
+app.put('/api/stocklist/:id/visibility', (req, res) => {
+  const stocklistId = parseInt(req.params.id, 10);
+  const { isPublic } = req.body;
+  if (isNaN(stocklistId)) {
+    return res.status(400).send('Invalid stocklist ID');
+  }
+  const query = 'UPDATE Stocklists SET isPublic = $1 WHERE stocklistid = $2';
+  client.query(query, [isPublic, stocklistId], (err, result) => {
+    if (err) {
+      console.error('Error executing query', err);
+      res.status(500).send('Error updating stocklist visibility');
+    } else if (result.rowCount === 0) {
+      res.status(404).send('Stocklist not found');
+    } else {
+      res.json({ message: 'Stocklist visibility updated successfully' });
+    }
+  });
+});
 
 // fetch user's stocklists
 app.get('/api/stocklists', (req, res) => {
