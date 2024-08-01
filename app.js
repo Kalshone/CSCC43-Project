@@ -1,5 +1,5 @@
 const express = require("express");
-const session = require('express-session');
+const session = require("express-session");
 const { Client } = require("pg");
 const app = express();
 const port = 3000;
@@ -14,13 +14,17 @@ const client = new Client({
   port: 5432,
 });
 
-// Set up session middleware
-app.use(session({
-  secret: 'your_secret_key',
-  resave: false,
-  saveUninitialized: true,
-  cookie: { secure: false } // Set to true if using HTTPS
-}));
+// Middleware setup
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(
+  session({
+    secret: "your-secret-key", // Replace with a strong secret key
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false }, // Set to true if using HTTPS
+  })
+);
 
 // Connect to the database
 client.connect((err) => {
@@ -40,66 +44,226 @@ client.connect((err) => {
   });
 
   // signup page
-  app.get('/signup', (req, res) => {
-    res.sendFile(__dirname + '/signup.html');
+  app.get("/signup", (req, res) => {
+    res.sendFile(__dirname + "/signup.html");
   });
 
   // signup process
-  app.post('/signup', (req, res) => {
-    const {email, name, password } = req.body;
-    const query = 'INSERT INTO Users (email, name, password) VALUES ($1, $2, $3) RETURNING email';
+  app.post("/signup", (req, res) => {
+    const { email, name, password } = req.body;
+    const query =
+      "INSERT INTO Users (email, name, password) VALUES ($1, $2, $3) RETURNING email";
     client.query(query, [email, name, password], (err, result) => {
       if (err) {
-        console.error('Error executing query', err);
-        res.status(500).send('Error signing up');
+        console.error("Error executing query", err);
+        res.status(500).send("Error signing up");
       } else {
-        res.redirect(`/dashboard/{email}`);
+        req.session.user = {
+          email: result.rows[0].email,
+        };
+        res.redirect(`/dashboard`);
       }
     });
   });
 
   // login page
-  app.get('/login', (req, res) => {
-    res.sendFile(__dirname + '/login.html');
+  app.get("/login", (req, res) => {
+    res.sendFile(__dirname + "/login.html");
   });
 
   // login process
-  app.post('/login', (req, res) => {
+  app.post("/login", (req, res) => {
     const { email, password } = req.body;
-    const query = 'SELECT * FROM Users WHERE email = $1 AND password = $2';
+    const query = "SELECT * FROM Users WHERE email = $1 AND password = $2";
     client.query(query, [email, password], (err, result) => {
       if (err) {
-        console.error('Error executing query', err);
-        res.status(500).send('Error logging in');
+        console.error("Error executing query", err);
+        res.status(500).send("Error logging in");
       } else if (result.rows.length === 0) {
-        res.status(401).send('Invalid email or password');
+        res.status(401).send("Invalid email or password");
       } else {
-        req.session.user = result.rows[0];
-        res.redirect(`/dashboard/${email}`);
+        req.session.user = {
+          email: result.rows[0].email,
+        };
+        res.redirect(`/dashboard`);
       }
     });
   });
 
   // dashboard page
-  app.get("/dashboard/:email", (req, res) => {
-    if (req.session.user && req.session.user.email === req.params.email) {
-      res.sendFile(__dirname + '/dashboard.html');
+  app.get("/dashboard/", (req, res) => {
+    if (req.session.user) {
+      res.sendFile(__dirname + "/dashboard.html");
+    } else {
+      res.redirect("/");
+    }
+  });
+
+  // see reviews
+  app.get("/reviews", (req, res) => {
+    if (req.session.user) {
+      res.sendFile(__dirname + "/reviews.html");
+    } else {
+      res.redirect("/");
+    }
+  });
+
+  //see stocks
+  app.get("/stocks", (req, res) => {
+    if (req.session.user) {
+      res.sendFile(__dirname + "/stocks.html");
+    } else {
+      res.redirect("/");
+    }
+  });
+
+  app.get("/friends", (req, res) => {
+    if (req.session.user) {
+      res.sendFile(__dirname + "/friends.html");
+    } else {
+      res.redirect("/");
+    }
+  });
+
+  app.get("/api/friends-list", (req, res) => {
+    if (req.session.user) {
+      const email = req.session.user.email;
+
+      const query = `
+        SELECT u.name, f.friendEmail
+        FROM (
+          SELECT email1 AS friendemail FROM Friends WHERE email2 = $1
+          UNION
+          SELECT email2 AS friendemail FROM Friends WHERE email1 = $1
+        ) f
+        JOIN Users u ON f.friendemail = u.email
+      `;
+
+      client.query(query, [email], (err, results) => {
+        if (err) {
+          console.error("Error fetching friends:", err);
+          res.status(500).send("Internal Server Error");
+        } else {
+          res.json({
+            friends: results.rows,
+          });
+        }
+      });
+    } else {
+      res.status(401).send("Unauthorized");
+    }
+  });
+
+  app.post('/api/friend-request', (req, res) => {
+    if (req.session.user) {
+      const { receiverEmail } = req.body;
+      const senderEmail = req.session.user.email;
+
+      const query = `
+        INSERT INTO FriendRequests (requestEmail, receiveEmail, status)
+        VALUES ($1, $2, 'Pending')
+        ON CONFLICT (requestemail, receiveemail) DO NOTHING
+      `;
+
+      client.query(query, [senderEmail, receiverEmail], (err, result) => {
+        if (err) {
+          console.error('Error sending friend request:', err);
+          res.status(500).send('Internal Server Error');
+        } else {
+          res.json({ message: 'Friend request sent' });
+        }
+      });
     } else {
       res.status(401).send('Unauthorized');
     }
   });
 
-  // see reviews
-  app.get('/reviews', (req, res) => {
-    const query = 'SELECT * FROM Reviews';
-    client.query(query, (err, result) => {
-      if (err) {
-        console.error('Error executing query', err);
-        res.status(500).send('Error getting reviews');
-      } else {
-        res.sendFile(path.join(__dirname, 'views', 'reviews.html'), { reviews: result.rows });
-      }
-    });
+  app.get("/api/pending-requests", (req, res) => {
+    if (req.session.user) {
+      const email = req.session.user.email;
+  
+      const query = `
+        SELECT requestEmail, Users.name AS requesterName
+        FROM FriendRequests
+        JOIN Users ON FriendRequests.requestEmail = Users.email
+        WHERE FriendRequests.receiveEmail = $1 AND FriendRequests.status = 'Pending'
+      `;
+
+      client.query(query, [email], (err, results) => {
+        if (err) {
+          console.error("Error fetching pending requests:", err);
+          res.status(500).send("Internal Server Error");
+        } else {
+          res.json({
+            requests: results.rows,
+          });
+        }
+      });
+    } else {
+      res.status(401).send("Unauthorized");
+    }
+  });
+  
+  app.post("/api/accept-request", (req, res) => {
+    if (req.session.user) {
+      const { requestEmail } = req.body;
+      const receiverEmail = req.session.user.email;
+      
+      // Delete the friend request from FriendRequests
+      const deleteQuery = `
+        DELETE FROM FriendRequests
+        WHERE requestEmail = $1 AND receiveEmail = $2
+      `;
+      
+      // Insert the emails into the Friends table
+      const insertQuery = `
+        INSERT INTO Friends (email1, email2)
+        VALUES ($1, $2)
+      `;
+      
+      client.query(deleteQuery, [requestEmail, receiverEmail], (err, results) => {
+        if (err) {
+          console.error("Error deleting friend request:", err);
+          res.status(500).send("Internal Server Error");
+        } else {
+          client.query(insertQuery, [requestEmail, receiverEmail], (err, results) => {
+            if (err) {
+              console.error("Error inserting into Friends table:", err);
+              res.status(500).send("Internal Server Error");
+            } else {
+              res.json({ message: "Friend request accepted and added to Friends list" });
+            }
+          });
+        }
+      });
+
+    } else {
+      res.status(401).send("Unauthorized");
+    }
+  });
+  
+  app.post("/api/decline-request", (req, res) => {
+    if (req.session.user) {
+      const { requestEmail } = req.body;
+      const receiverEmail = req.session.user.email;
+  
+      const query = `
+        UPDATE FriendRequests
+        SET status = 'declined'
+        WHERE requestEmail = $1 AND receiveEmail = $2
+      `;
+  
+      client.query(query, [requestEmail, receiverEmail], (err, results) => {
+        if (err) {
+          console.error("Error declining friend request:", err);
+          res.status(500).send("Internal Server Error");
+        } else {
+          res.json({ message: "Friend request declined" });
+        }
+      });
+    } else {
+      res.status(401).send("Unauthorized");
+    }
   });
 
   // // friends page
@@ -116,8 +280,17 @@ client.connect((err) => {
   });
   
   //logout
-  app.get('/logout', (req, res) => {
-    res.redirect('/');
+  app.get("/logout", (req, res) => {
+    res.redirect("/");
+  });
+
+  // API endpoint to get session data
+  app.get("/api/session", (req, res) => {
+    if (req.session.user) {
+      res.json({ user: req.session.user });
+    } else {
+      res.status(401).send("Unauthorized");
+    }
   });
 
   app.listen(port, () => {

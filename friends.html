@@ -1,58 +1,183 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<html>
+  <head>
     <title>Friends Page</title>
     <style>
-       body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        /* .container {
-            text-align: center;
-            background: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-        } */
-        .section {
-            border: 1px solid #ccc;
-            padding: 10px;
-            margin-bottom: 20px;
-        }
-        h1 {
-            text-align: center;
-        }
-        .btn-group {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin: 10px;
-        }
-        .btn:hover {
-            background-color: #45a049;
-        }
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+      }
+      h1 {
+        text-align: center;
+      }
+      .section {
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin-bottom: 20px;
+      }
+      ul li a {
+        color: #4caf50;
+      }
+      .form-section form {
+        display: flex;
+        flex-direction: column;
+      }
+      .form-section input,
+      .form-section button {
+        padding: 10px;
+        margin: 5px 0;
+      }
+      .list-section ul {
+        list-style: none;
+        padding: 0;
+      }
+      .list-section li {
+        background: #eee;
+        margin: 5px 0;
+        padding: 10px;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <h1>Friends Page</h1>
+    <div id="welcome-message">Welcome</div>
+
     <div class="section">
-        <p>Welcome to the friends page. Please choose an option:</p>
-        <p id="welcome-message">Welcome, ${userName}</p>
-        <div class="btn-group">
-            <a href="#friend-requests" class="btn">Friend Requests</a>
-            <a href="#send-request" class="btn">Send Request</a>
-            <a href="#friends-list" class="btn">Friends List</a>
-        </div>
+      <h2>Pending Friend Requests</h2>
+      <ul id="pending-requests">
+        <!-- List of pending friend requests will be added here -->
+      </ul>
     </div>
-</body>
+
+    <div class="section form-section">
+      <h2>Send a Friend Request</h2>
+      <form action="/send-friend-request" method="post">
+        <input
+          type="email"
+          name="receiveEmail"
+          placeholder="Friend's Email"
+          required
+          id="friend-request-input"
+        />
+        <button type="button" id="send-request-button">Send Request</button>
+      </form>
+    </div>
+
+    <div class="section list-section">
+      <h2>Friends List</h2>
+      <ul id="friends-list"></ul>
+    </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        // Fetch session data for welcome message
+        fetch("/api/session")
+          .then((response) => response.json())
+          .then((data) => {
+            const welcomeMessage = document.getElementById("welcome-message");
+            welcomeMessage.textContent = `Welcome ${data.user.email}`;
+          })
+          .catch((error) =>
+            console.error("Error fetching session data:", error)
+          );
+
+        // Fetch friends list
+        fetchFriendsList();
+
+        // Fetch pending friend requests
+        fetchPendingRequests();
+
+        // Add friend request functionality
+        const friendRequestInput = document.getElementById('friend-request-input');
+        const sendRequestButton = document.getElementById('send-request-button');
+
+        sendRequestButton.addEventListener('click', () => {
+          const receiverEmail = friendRequestInput.value.trim();
+          if (receiverEmail) {
+            sendFriendRequest(receiverEmail);
+            friendRequestInput.value = '';
+          }
+        });
+      });
+
+      function fetchFriendsList() {
+        fetch("/api/friends-list")
+          .then((response) => response.json())
+          .then((data) => {
+            const friendsList = document.getElementById("friends-list");
+            friendsList.innerHTML = ""; // Clear any existing list items
+            data.friends.forEach((friend) => {
+              const listItem = document.createElement("li");
+              listItem.textContent = `${friend.name} (${friend.friendemail})`;
+              friendsList.appendChild(listItem);
+            });
+          })
+          .catch((error) =>
+            console.error("Error fetching friends list:", error)
+          );
+      }
+
+      function fetchPendingRequests() {
+        fetch('/api/pending-requests')
+          .then(response => response.json())
+          .then(data => {
+            const pendingRequestsEl = document.getElementById('pending-requests');
+            pendingRequestsEl.innerHTML = '';
+            data.requests.forEach(request => {
+              const listItem = document.createElement('li');
+
+              const requestorName = document.createElement('span');
+              requestorName.textContent = `${request.requestername} (${request.requestemail}) wants to be your friend`;
+
+              const acceptButton = document.createElement('button');
+              acceptButton.textContent = 'Accept';
+              acceptButton.onclick = () => acceptFriendRequest(request.requestemail);
+
+              const declineButton = document.createElement('button');
+              declineButton.textContent = 'Decline';
+              declineButton.onclick = () => declineFriendRequest(request.requestemail);
+
+              listItem.appendChild(requestorName);
+              listItem.appendChild(acceptButton);
+              listItem.appendChild(declineButton);
+              pendingRequestsEl.appendChild(listItem);
+            });
+          })
+          .catch(error => console.error("Error fetching pending requests:", error));
+      }
+
+      function acceptFriendRequest(requestEmail) {
+        fetch('/api/accept-request', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ requestEmail })
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Friend request accepted:', data);
+          fetchPendingRequests();
+          fetchFriendsList();
+        })
+        .catch(error => console.error('Error accepting friend request:', error));
+      }
+
+      function declineFriendRequest(requestEmail) {
+        fetch('/api/decline-request', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ requestEmail })
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Friend request declined:', data);
+          fetchPendingRequests();
+        })
+        .catch(error => console.error('Error declining friend request:', error));
+      }
+    </script>
+  </body>
 </html>
