@@ -101,15 +101,16 @@ client.connect((err) => {
   // see reviews
   app.get("/reviews", (req, res) => {
     if (req.session.user) {
-      const query = "SELECT * FROM Reviews";
-      client.query(query, (err, result) => {
-        if (err) {
-          console.error("Error executing query", err);
-          res.status(500).send("Error getting reviews");
-        } else {
-          res.json(result.rows);
-        }
-      });
+      res.sendFile(__dirname + "/reviews.html");
+    } else {
+      res.redirect("/");
+    }
+  });
+
+  //see stocks
+  app.get("/stocks", (req, res) => {
+    if (req.session.user) {
+      res.sendFile(__dirname + "/stocks.html");
     } else {
       res.redirect("/");
     }
@@ -192,7 +193,6 @@ client.connect((err) => {
           console.error("Error fetching pending requests:", err);
           res.status(500).send("Internal Server Error");
         } else {
-          console.log("Pending requests fetched:", results.rows);
           res.json({
             requests: results.rows,
           });
