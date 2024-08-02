@@ -679,6 +679,25 @@ app.get('/api/stock-detail/:code', (req, res) => {
   });
 });
 
+// add stock data
+app.post('/api/add-stock-data', (req, res) => {
+  const { code, timestamp, open, high, low, close, volume } = req.body;
+
+  const query = `
+    INSERT INTO stockdata (code, timestamp, open, high, low, close, volume)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+  `;
+
+  client.query(query, [code, timestamp, open, high, low, close, volume], (err, result) => {
+    if (err) {
+      console.error('Error adding stock data:', err);
+      res.status(500).json({ success: false, message: 'Error adding stock data' });
+    } else {
+      res.json({ success: true });
+    }
+  });
+});
+
 
 
   app.get("/friends", (req, res) => {
