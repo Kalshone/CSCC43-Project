@@ -119,26 +119,34 @@ client.connect((err) => {
   });
 
   // add portfolio process
-  app.post('/add-portfolio', (req, res) => {
-    if (req.session.user) {
-      const email = req.session.user.email;
-      const stockListId = null;
-      const name = req.body.portfolioName;
-      const cashbalance = 0;
-      const query = 'INSERT INTO PORTFOLIOS (email, stockListId, name, cashbalance) VALUES ($1, $2, $3, $4) RETURNING portfolioid';
-      client.query(query, [email, stockListId, name, cashbalance], (err, result) => {
+app.post('/add-portfolio', (req, res) => {
+  if (req.session.user) {
+    const email = req.session.user.email;
+    const portfolioName = req.body.portfolioName;
+    const cashbalance = 0;
+    const createStocklistQuery = 'INSERT INTO Stocklists (email, name, isPublic) VALUES ($1, $2, $3) RETURNING stocklistid';
+    client.query(createStocklistQuery, [email, portfolioName, false], (err, result) => {
+      if (err) {
+        console.error('Error creating stocklist:', err);
+        return res.status(500).send('Error creating stocklist');
+      }
+
+      const stocklistId = result.rows[0].stocklistid;
+      const createPortfolioQuery = 'INSERT INTO Portfolios (email, stockListId, name, cashbalance) VALUES ($1, $2, $3, $4) RETURNING portfolioid';
+      client.query(createPortfolioQuery, [email, stocklistId, portfolioName, cashbalance], (err, result) => {
         if (err) {
-          console.error('Error executing query', err);
-          res.status(500).send('Error adding portfolio');
-        } else {
-          const newPortfolio = result.rows[0];
-          res.redirect(`/portfolio-page?id=${newPortfolio.portfolioid}`);
+          console.error('Error creating portfolio:', err);
+          return res.status(500).send('Error creating portfolio');
         }
+
+        const newPortfolio = result.rows[0];
+        res.redirect(`/portfolio-page?id=${newPortfolio.portfolioid}`);
       });
-    } else {
-      res.redirect('/');
-    }
-  });
+    });
+  } else {
+    res.redirect('/');
+  }
+});
 
   // fetch portfolios for user
   app.get('/api/portfolios', (req, res) => {
@@ -179,6 +187,243 @@ client.connect((err) => {
     });
   });
 
+  // update cash balance
+app.put('/api/portfolio/:id/add-cash', (req, res) => {
+  const portfolioId = parseInt(req.params.id, 10);
+  const { amount } = req.body;
+  if (isNaN(portfolioId) || isNaN(amount) || amount <= 0) {
+    return res.status(400).send('Invalid portfolio ID or amount');
+  }
+  const fetchQuery = 'SELECT cashbalance FROM Portfolios WHERE portfolioid = $1';
+  client.query(fetchQuery, [portfolioId], (fetchErr, fetchResult) => {
+    if (fetchErr) {
+      console.error('Error fetching portfolio:', fetchErr);
+      return res.status(500).send('Error fetching portfolio');
+    }
+
+    if (fetchResult.rows.length === 0) {
+      return res.status(404).send('Portfolio not found');
+    }
+    const currentCashBalance = parseFloat(fetchResult.rows[0].cashbalance);
+    const newCashBalance = currentCashBalance + parseFloat(amount);
+    const updateQuery = 'UPDATE Portfolios SET cashbalance = $1 WHERE portfolioid = $2 RETURNING cashbalance';
+    client.query(updateQuery, [newCashBalance, portfolioId], (updateErr, updateResult) => {
+      if (updateErr) {
+        console.error('Error updating cash balance:', updateErr);
+        return res.status(500).send('Error updating cash balance');
+      }
+      res.json({ newCashBalance: updateResult.rows[0].cashbalance });
+    });
+  });
+});
+
+// withdraw cash
+app.put('/api/portfolio/:id/withdraw-cash', (req, res) => {
+  const portfolioId = parseInt(req.params.id, 10);
+  const { amount } = req.body;
+  if (isNaN(portfolioId) || isNaN(amount) || amount <= 0) {
+    return res.status(400).send('Invalid portfolio ID or amount');
+  }
+  const fetchQuery = 'SELECT cashbalance FROM Portfolios WHERE portfolioid = $1';
+  client.query(fetchQuery, [portfolioId], (fetchErr, fetchResult) => {
+    if (fetchErr) {
+      console.error('Error fetching portfolio:', fetchErr);
+      return res.status(500).send('Error fetching portfolio');
+    }
+
+    if (fetchResult.rows.length === 0) {
+      return res.status(404).send('Portfolio not found');
+    }
+    const currentCashBalance = parseFloat(fetchResult.rows[0].cashbalance);
+    if (amount > currentCashBalance) {
+      return res.status(400).send('Insufficient funds');
+    }
+    const newCashBalance = currentCashBalance - parseFloat(amount);
+    const updateQuery = 'UPDATE Portfolios SET cashbalance = $1 WHERE portfolioid = $2 RETURNING cashbalance';
+    client.query(updateQuery, [newCashBalance, portfolioId], (updateErr, updateResult) => {
+      if (updateErr) {
+        console.error('Error updating cash balance:', updateErr);
+        return res.status(500).send('Error updating cash balance');
+      }
+      res.json({ newCashBalance: updateResult.rows[0].cashbalance });
+    });
+  });
+});
+
+
+// buy stock
+app.post('/api/buy-stock', (req, res) => {
+  const { stockSymbol, numShares, portfolioId } = req.body;
+
+  if (isNaN(numShares) || numShares <= 0) {
+    return res.status(400).send({ success: false, message: 'Invalid number of shares' });
+  }
+
+  const getStockPriceQuery = `
+    SELECT close
+    FROM stockdata
+    WHERE code = $1
+    ORDER BY timestamp DESC
+    LIMIT 1
+  `;
+
+  const getPortfolioQuery = 'SELECT * FROM Portfolios WHERE portfolioid = $1';
+  const createStockholdingQuery = 'INSERT INTO Stockholdings (stocksymbol, numshares) VALUES ($1, $2) RETURNING stockholdingid';
+  const addStocklistHoldingQuery = 'INSERT INTO Stocklistholdings (stocklistid, stockholdingid) VALUES ($1, $2)';
+  const updatePortfolioQuery = 'UPDATE Portfolios SET cashbalance = $1 WHERE portfolioid = $2';
+
+  client.query(getStockPriceQuery, [stockSymbol], (err, stockResult) => {
+    if (err) {
+      console.error('Error fetching stock price:', err);
+      return res.status(500).send({ success: false, message: 'Error fetching stock price' });
+    }
+    if (stockResult.rows.length === 0) {
+      return res.status(404).send({ success: false, message: 'Stock not found' });
+    }
+    const stockPrice = stockResult.rows[0].close;
+    const totalCost = stockPrice * numShares;
+    client.query(getPortfolioQuery, [portfolioId], (err, portfolioResult) => {
+      if (err) {
+        console.error('Error fetching portfolio:', err);
+        return res.status(500).send({ success: false, message: 'Error fetching portfolio' });
+      }
+
+      if (portfolioResult.rows.length === 0) {
+        return res.status(404).send({ success: false, message: 'Portfolio not found' });
+      }
+
+      const portfolio = portfolioResult.rows[0];
+      const newCashBalance = portfolio.cashbalance - totalCost;
+
+      if (newCashBalance < 0) {
+        return res.status(400).send({ success: false, message: 'Insufficient funds in portfolio' });
+      }
+      client.query(createStockholdingQuery, [stockSymbol, numShares], (err, stockholdingResult) => {
+        if (err) {
+          console.error('Error creating stockholding:', err);
+          return res.status(500).send({ success: false, message: 'Error creating stockholding' });
+        }
+
+        const stockholdingId = stockholdingResult.rows[0].stockholdingid;
+        client.query(addStocklistHoldingQuery, [portfolio.stocklistid, stockholdingId], (err) => {
+          if (err) {
+            console.error('Error adding stockholding to stocklist:', err);
+            return res.status(500).send({ success: false, message: 'Error adding stockholding to stocklist' });
+          }
+          client.query(updatePortfolioQuery, [newCashBalance, portfolioId], (err) => {
+            if (err) {
+              console.error('Error updating portfolio cash balance:', err);
+              return res.status(500).send({ success: false, message: 'Error updating portfolio cash balance' });
+            }
+
+            res.send({ success: true, newCashBalance });
+          });
+        });
+      });
+    });
+  });
+});
+
+// sell stocks
+app.post('/api/sell-stock', (req, res) => {
+  const { stockSymbol, numShares, portfolioId } = req.body;
+
+  if (isNaN(numShares) || numShares <= 0) {
+    return res.status(400).send({ success: false, message: 'Invalid number of shares' });
+  }
+
+  const getStockPriceQuery = `
+    SELECT close
+    FROM stockdata
+    WHERE code = $1
+    ORDER BY timestamp DESC
+    LIMIT 1
+  `;
+
+  const getPortfolioQuery = 'SELECT * FROM Portfolios WHERE portfolioid = $1';
+  const updateStockholdingQuery = 'UPDATE Stockholdings SET numshares = numshares - $1 WHERE stocksymbol = $2 AND numshares >= $1 RETURNING stockholdingid, numshares';
+  const deleteStocklistHoldingQuery = 'DELETE FROM Stocklistholdings WHERE stockholdingid = $1';
+  const deleteStockholdingQuery = 'DELETE FROM Stockholdings WHERE stockholdingid = $1';
+  const updatePortfolioQuery = 'UPDATE Portfolios SET cashbalance = $1 WHERE portfolioid = $2';
+
+  client.query(getStockPriceQuery, [stockSymbol], (err, stockResult) => {
+    if (err) {
+      console.error('Error fetching stock price:', err);
+      return res.status(500).send({ success: false, message: 'Error fetching stock price' });
+    }
+
+    if (stockResult.rows.length === 0) {
+      return res.status(404).send({ success: false, message: 'Stock not found' });
+    }
+
+    const stockPrice = parseFloat(stockResult.rows[0].close);
+    const totalRevenue = stockPrice * numShares;
+
+    client.query(getPortfolioQuery, [portfolioId], (err, portfolioResult) => {
+      if (err) {
+        console.error('Error fetching portfolio:', err);
+        return res.status(500).send({ success: false, message: 'Error fetching portfolio' });
+      }
+
+      if (portfolioResult.rows.length === 0) {
+        return res.status(404).send({ success: false, message: 'Portfolio not found' });
+      }
+
+      const portfolio = portfolioResult.rows[0];
+      const newCashBalance = parseFloat(portfolio.cashbalance) + totalRevenue;
+
+      client.query(updateStockholdingQuery, [numShares, stockSymbol], (err, stockholdingResult) => {
+        if (err) {
+          console.error('Error updating stockholding:', err);
+          return res.status(500).send({ success: false, message: 'Error updating stockholding' });
+        }
+
+        if (stockholdingResult.rows.length === 0) {
+          return res.status(400).send({ success: false, message: 'Not enough shares to sell' });
+        }
+
+        const updatedStockholding = stockholdingResult.rows[0];
+
+        if (updatedStockholding.numshares === 0) {
+          client.query(deleteStocklistHoldingQuery, [updatedStockholding.stockholdingid], (err) => {
+            if (err) {
+              console.error('Error deleting stocklist holding:', err);
+              return res.status(500).send({ success: false, message: 'Error deleting stocklist holding' });
+            }
+
+            client.query(deleteStockholdingQuery, [updatedStockholding.stockholdingid], (err) => {
+              if (err) {
+                console.error('Error deleting stockholding:', err);
+                return res.status(500).send({ success: false, message: 'Error deleting stockholding' });
+              }
+
+              client.query(updatePortfolioQuery, [newCashBalance, portfolioId], (err) => {
+                if (err) {
+                  console.error('Error updating portfolio cash balance:', err);
+                  return res.status(500).send({ success: false, message: 'Error updating portfolio cash balance' });
+                }
+
+                res.send({ success: true, newCashBalance });
+              });
+            });
+          });
+        } else {
+          client.query(updatePortfolioQuery, [newCashBalance, portfolioId], (err) => {
+            if (err) {
+              console.error('Error updating portfolio cash balance:', err);
+              return res.status(500).send({ success: false, message: 'Error updating portfolio cash balance' });
+            }
+
+            res.send({ success: true, newCashBalance });
+          });
+        }
+      });
+    });
+  });
+});
+
+
+
 
   // stocklist page
     app.get("/stocklist-page", (req, res) => {
@@ -190,28 +435,140 @@ client.connect((err) => {
     res.sendFile(__dirname + '/add-stocklist-page.html');
   });
 
-  // add stocklist process
-  app.post('/add-stocklist', (req, res) => {
-    if (req.session.user) {
-      const email = req.session.user.email;
-      const name = req.body.stocklistName;
-      const isPublic = false;
-      
-      const query = 'INSERT INTO Stocklists (email, name, isPublic) VALUES ($1, $2, $3) RETURNING stocklistid';
-      
-      client.query(query, [email, name, isPublic], (err, result) => {
+// Add stocklist process
+app.post('/add-stocklist', (req, res) => {
+  if (req.session.user) {
+    const email = req.session.user.email;
+    const name = req.body.stocklistName;
+    const isPublic = req.body.stocklistVisibility === 'Public';
+    const query = 'INSERT INTO Stocklists (email, name, isPublic) VALUES ($1, $2, $3) RETURNING stocklistid';
+    client.query(query, [email, name, isPublic], (err, result) => {
+      if (err) {
+        console.error('Error executing query', err);
+        res.status(500).send('Error adding stocklist');
+      } else {
+        const newStocklist = result.rows[0];
+        res.redirect(`/stocklist-page?id=${newStocklist.stocklistid}`);
+      }
+    });
+  } else {
+    res.redirect('/login');
+  }
+});
+
+// update stocklist visibility
+app.put('/api/stocklist/:id/visibility', (req, res) => {
+  const stocklistId = parseInt(req.params.id, 10);
+  const { isPublic } = req.body;
+  if (isNaN(stocklistId)) {
+    return res.status(400).send('Invalid stocklist ID');
+  }
+  const query = 'UPDATE Stocklists SET isPublic = $1 WHERE stocklistid = $2';
+  client.query(query, [isPublic, stocklistId], (err, result) => {
+    if (err) {
+      console.error('Error executing query', err);
+      res.status(500).send('Error updating stocklist visibility');
+    } else if (result.rowCount === 0) {
+      res.status(404).send('Stocklist not found');
+    } else {
+      res.json({ message: 'Stocklist visibility updated successfully' });
+    }
+  });
+});
+
+// fetch stocks in stocklist and most recent close price
+app.get('/api/stocklist/:id/stocks', (req, res) => {
+  const stocklistId = parseInt(req.params.id, 10);
+
+  if (isNaN(stocklistId)) {
+    return res.status(400).send('Invalid stocklist ID');
+  }
+
+  const query = `
+    SELECT sh.stocksymbol, sh.numshares, sd.close
+    FROM Stocklistholdings slh
+    JOIN Stockholdings sh ON slh.stockholdingid = sh.stockholdingid
+    LEFT JOIN LATERAL (
+      SELECT close
+      FROM stockdata sd
+      WHERE sd.code = sh.stocksymbol
+      ORDER BY sd.timestamp DESC
+      LIMIT 1
+    ) sd ON true
+    WHERE slh.stocklistid = $1;
+  `;
+
+  client.query(query, [stocklistId], (err, result) => {
+    if (err) {
+      console.error('Error fetching stocklist stocks:', err);
+      res.status(500).send('Error fetching stocklist stocks');
+    } else {
+      res.json(result.rows);
+    }
+  });
+});
+
+
+// add stocks to stocklist (create stockholding if not exists)
+app.post('/api/add-to-stocklist', (req, res) => {
+  const { stockSymbol, numShares, stocklistId } = req.body;
+
+  const checkStockholdingQuery = 'SELECT stockholdingid FROM Stockholdings WHERE stocksymbol = $1 AND numshares = $2';
+  client.query(checkStockholdingQuery, [stockSymbol, numShares], (err, result) => {
+    if (err) {
+      console.error('Error checking stockholding:', err);
+      return res.status(500).send({ success: false, message: 'Error checking stockholding' });
+    }
+
+    if (result.rows.length > 0) {
+      const stockholdingId = result.rows[0].stockholdingid;
+
+      const checkStocklistHoldingQuery = 'SELECT * FROM Stocklistholdings WHERE stocklistid = $1 AND stockholdingid = $2';
+      client.query(checkStocklistHoldingQuery, [stocklistId, stockholdingId], (err, result) => {
         if (err) {
-          console.error('Error executing query', err);
-          res.status(500).send('Error adding stocklist');
+          console.error('Error checking stocklistholding:', err);
+          return res.status(500).send({ success: false, message: 'Error checking stocklistholding' });
+        }
+
+        if (result.rows.length > 0) {
+          return res.status(400).send({ success: false, message: 'Stockholding already exists in the stocklist' });
         } else {
-          const newStocklist = result.rows[0];
-          res.redirect(`/stocklist-page?id=${newStocklist.stocklistid}`);
+          
+          const addStocklistHoldingQuery = 'INSERT INTO Stocklistholdings (stocklistid, stockholdingid) VALUES ($1, $2)';
+          client.query(addStocklistHoldingQuery, [stocklistId, stockholdingId], (err, result) => {
+            if (err) {
+              console.error('Error adding stockholding to stocklist:', err);
+              return res.status(500).send({ success: false, message: 'Error adding stockholding to stocklist' });
+            }
+
+            return res.send({ success: true });
+          });
         }
       });
     } else {
-      res.redirect('/login');
+      
+      const createStockholdingQuery = 'INSERT INTO Stockholdings (stocksymbol, numshares) VALUES ($1, $2) RETURNING stockholdingid';
+      client.query(createStockholdingQuery, [stockSymbol, numShares], (err, result) => {
+        if (err) {
+          console.error('Error creating stockholding:', err);
+          return res.status(500).send({ success: false, message: 'Error creating stockholding' });
+        }
+
+        const stockholdingId = result.rows[0].stockholdingid;
+        const addStocklistHoldingQuery = 'INSERT INTO Stocklistholdings (stocklistid, stockholdingid) VALUES ($1, $2)';
+        client.query(addStocklistHoldingQuery, [stocklistId, stockholdingId], (err, result) => {
+          if (err) {
+            console.error('Error adding stockholding to stocklist:', err);
+            return res.status(500).send({ success: false, message: 'Error adding stockholding to stocklist' });
+          }
+
+          return res.send({ success: true });
+        });
+      });
     }
   });
+});
+
 
   // fetch user's stocklists
   app.get('/api/stocklists', (req, res) => {
@@ -239,18 +596,38 @@ client.connect((err) => {
       return res.status(400).send('Invalid stocklist ID');
     }
 
-    const query = 'SELECT * FROM Stocklists WHERE stocklistid = $1';
-    client.query(query, [stocklistId], (err, result) => {
-      if (err) {
-        console.error('Error executing query', err);
-        res.status(500).send('Error fetching stocklist details');
-      } else if (result.rows.length === 0) {
-        res.status(404).send('Stocklist not found');
-      } else {
-        res.json(result.rows[0]);
-      }
-    });
+  const query = 'SELECT stocklistid, name, email AS owner, isPublic FROM Stocklists WHERE stocklistid = $1';
+  client.query(query, [stocklistId], (err, result) => {
+    if (err) {
+      console.error('Error executing query', err);
+      res.status(500).send('Error fetching stocklist details');
+    } else if (result.rows.length === 0) {
+      res.status(404).send('Stocklist not found');
+    } else {
+      res.json(result.rows[0]);
+    }
   });
+});
+
+  // stocklist explore page
+  app.get("/stocklists-explore", (req, res) => {
+    res.sendFile(__dirname + '/stocklists-explore.html');
+  });
+
+  // Fetch all public stocklists
+app.get('/api/public-stocklists', (req, res) => {
+  const query = 'SELECT stocklistid, name FROM Stocklists WHERE isPublic = true';
+  
+  client.query(query, (err, result) => {
+    if (err) {
+      console.error('Error fetching public stocklists:', err);
+      res.status(500).send('Error fetching public stocklists');
+    } else {
+      res.json(result.rows);
+    }
+  });
+});
+
 
   app.get("/reviews", (req, res) => {
     if (req.session.user) {
@@ -375,6 +752,60 @@ client.connect((err) => {
       res.redirect("/");
     }
   });
+
+// fetch stocks and most recent close price
+app.get('/api/stocks', (req, res) => {
+  const query = `
+    SELECT DISTINCT ON (code) code, close
+    FROM stockdata
+    ORDER BY code, timestamp DESC;
+  `;
+
+  client.query(query, (err, result) => {
+    if (err) {
+      console.error('Error executing query', err);
+      res.status(500).send('Error fetching stock data');
+    } else {
+      res.json(result.rows);
+    }
+  });
+});
+
+// fetch stock detail by code
+app.get('/api/stock-detail/:code', (req, res) => {
+  const stockCode = req.params.code;
+
+  const query = 'SELECT * FROM stockdata WHERE code = $1 ORDER BY timestamp DESC';
+  client.query(query, [stockCode], (err, result) => {
+    if (err) {
+      console.error('Error fetching stock detail:', err);
+      res.status(500).send('Error fetching stock detail');
+    } else {
+      res.json(result.rows);
+    }
+  });
+});
+
+// add stock data
+app.post('/api/add-stock-data', (req, res) => {
+  const { code, timestamp, open, high, low, close, volume } = req.body;
+
+  const query = `
+    INSERT INTO stockdata (code, timestamp, open, high, low, close, volume)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+  `;
+
+  client.query(query, [code, timestamp, open, high, low, close, volume], (err, result) => {
+    if (err) {
+      console.error('Error adding stock data:', err);
+      res.status(500).json({ success: false, message: 'Error adding stock data' });
+    } else {
+      res.json({ success: true });
+    }
+  });
+});
+
+
 
   app.get("/friends", (req, res) => {
     if (req.session.user) {

@@ -10,7 +10,23 @@
     h1 {
       text-align: center;
     }
-    .portfolio-details {
+    .portfolio-details, .stocklist-details {
+      margin-top: 20px;
+    }
+    .stock-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    .stock-table th, .stock-table td {
+      border: 1px solid #ccc;
+      padding: 10px;
+      text-align: left;
+    }
+    .stock-table th {
+      background-color: #f4f4f4;
+    }
+    .add-cash, .withdraw-cash {
       margin-top: 20px;
     }
   </style>
@@ -20,8 +36,30 @@
   <div class="portfolio-details">
     <p><strong>ID:</strong> <span id="portfolio-id"></span></p>
     <p><strong>Name:</strong> <span id="portfolio-name-detail"></span></p>
-    <p><strong>Stock List ID:</strong> <span id="stock-list-id"></span></p>
     <p><strong>Cash Balance:</strong> <span id="cash-balance"></span></p>
+    <p><strong>Portfolio Value:</strong> <span id="portfolio-value"></span></p>
+  </div>
+
+  <div class="add-cash">
+    <h3>Add Cash to Portfolio</h3>
+    <input type="number" id="cash-amount" placeholder="Enter amount">
+    <button id="add-cash-button">Add</button>
+    <button id="withdraw-cash-button">Withdraw</button>
+  </div>
+
+  <div class="stocklist-details">
+    <h3>Stocks in this Stocklist</h3>
+    <table class="stock-table" id="stock-table">
+      <thead>
+        <tr>
+          <th>Stock Symbol</th>
+          <th>Number of Shares</th>
+          <th>Most Recent Close Price (per share)</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
   </div>
 
   <script>
@@ -42,8 +80,91 @@
               document.getElementById('portfolio-name').textContent = data.name || 'Unnamed Portfolio';
               document.getElementById('portfolio-id').textContent = data.portfolioid || 'N/A';
               document.getElementById('portfolio-name-detail').textContent = data.name || 'N/A';
-              document.getElementById('stock-list-id').textContent = data.stocklistid || 'N/A';
               document.getElementById('cash-balance').textContent = data.cashbalance || 'N/A';
+
+              if (data.stocklistid) {
+                fetch(`/api/stocklist/${data.stocklistid}/stocks`)
+                  .then(response => {
+                    if (!response.ok) {
+                      throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                  })
+                  .then(stockData => {
+                    const stockTableBody = document.getElementById('stock-table').querySelector('tbody');
+                    let totalValue = 0;
+                    stockData.forEach(stock => {
+                      const row = document.createElement('tr');
+                      const stockSymbolCell = document.createElement('td');
+                      stockSymbolCell.textContent = stock.stocksymbol;
+                      const numSharesCell = document.createElement('td');
+                      numSharesCell.textContent = stock.numshares;
+                      numSharesCell.id = `num-shares-${stock.stocksymbol}`;
+                      const closePriceCell = document.createElement('td');
+                      closePriceCell.textContent = stock.close || 'N/A';
+
+                      const stockValue = stock.numshares * stock.close;
+                      totalValue += stockValue;
+
+                      const actionCell = document.createElement('td');
+                      const numSharesToSellInput = document.createElement('input');
+                      numSharesToSellInput.type = 'number';
+                      numSharesToSellInput.placeholder = 'Shares';
+                      const sellButton = document.createElement('button');
+                      sellButton.textContent = 'Sell';
+                      sellButton.addEventListener('click', () => {
+                        const numSharesToSell = parseInt(numSharesToSellInput.value, 10);
+                        if (isNaN(numSharesToSell) || numSharesToSell <= 0 || numSharesToSell > parseInt(numSharesCell.textContent, 10)) {
+                          alert('Please enter a valid number of shares to sell.');
+                          return;
+                        }
+
+                        fetch('/api/sell-stock', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json'
+                          },
+                          body: JSON.stringify({
+                            stockSymbol: stock.stocksymbol,
+                            numShares: numSharesToSell,
+                            portfolioId: portfolioId
+                          })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                          if (data.success) {
+                            alert('Stock sold successfully');
+                            document.getElementById('cash-balance').textContent = data.newCashBalance;
+                            const newNumShares = parseInt(numSharesCell.textContent, 10) - numSharesToSell;
+                            if (newNumShares <= 0) {
+                              row.remove();
+                            } else {
+                              numSharesCell.textContent = newNumShares;
+                            }
+                            numSharesToSellInput.value = '';
+                            const stockValueAfterSell = newNumShares * stock.close;
+                            totalValue = totalValue - stockValue + stockValueAfterSell;
+                            document.getElementById('portfolio-value').textContent = totalValue.toFixed(2);
+                          } else {
+                            alert(`Error selling stock: ${data.message}`);
+                          }
+                        })
+                        .catch(error => console.error('Error:', error));
+                      });
+                      actionCell.appendChild(numSharesToSellInput);
+                      actionCell.appendChild(sellButton);
+
+                      row.appendChild(stockSymbolCell);
+                      row.appendChild(numSharesCell);
+                      row.appendChild(closePriceCell);
+                      row.appendChild(actionCell);
+                      stockTableBody.appendChild(row);
+                    });
+
+                    document.getElementById('portfolio-value').textContent = totalValue.toFixed(2);
+                  })
+                  .catch(error => console.error('Error fetching stock data:', error));
+              }
             } else {
               console.error('No data returned for portfolio details.');
             }
@@ -52,6 +173,63 @@
       } else {
         console.error('No portfolio ID found in the URL.');
       }
+
+      document.getElementById('add-cash-button').addEventListener('click', function() {
+        const cashAmountInput = document.getElementById('cash-amount');
+        const cashAmount = parseFloat(cashAmountInput.value);
+        if (!isNaN(cashAmount) && cashAmount > 0) {
+          fetch(`/api/portfolio/${portfolioId}/add-cash`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ amount: cashAmount })
+          })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            return response.json();
+          })
+          .then(data => {
+            console.log('Cash added successfully:', data);
+            document.getElementById('cash-balance').textContent = data.newCashBalance;
+            cashAmountInput.value = '';
+          })
+          .catch(error => console.error('Error adding cash to portfolio:', error));
+        } else {
+          alert('Please enter a valid cash amount.');
+        }
+      });
+
+      document.getElementById('withdraw-cash-button').addEventListener('click', function() {
+        const cashAmountInput = document.getElementById('cash-amount');
+        const cashAmount = parseFloat(cashAmountInput.value);
+        const currentCashBalance = parseFloat(document.getElementById('cash-balance').textContent);
+        if (!isNaN(cashAmount) && cashAmount > 0 && cashAmount <= currentCashBalance) {
+          fetch(`/api/portfolio/${portfolioId}/withdraw-cash`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ amount: cashAmount })
+          })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            return response.json();
+          })
+          .then(data => {
+            console.log('Cash withdrawn successfully:', data);
+            document.getElementById('cash-balance').textContent = data.newCashBalance;
+            cashAmountInput.value = '';
+          })
+          .catch(error => console.error('Error withdrawing cash from portfolio:', error));
+        } else {
+          alert('Please enter a valid cash amount within your available balance.');
+        }
+      });
     });
   </script>
 </body>

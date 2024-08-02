@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Stock Detail</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+    }
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+    }
+    .stock-table, .input-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      table-layout: fixed;
+    }
+    .stock-table th, .stock-table td, .input-table th, .input-table td {
+      border: 1px solid #ccc;
+      padding: 10px;
+      text-align: left;
+    }
+    .stock-table th, .input-table th {
+      background-color: #f4f4f4;
+    }
+    .input-table td {
+      padding: 0;
+    }
+    .input-table input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1 id="stock-code"></h1>
+
+  <h2>Stock Price Over Time</h2>
+  <canvas id="stock-chart"></canvas>
+
+  <h2>Add New Stock Data</h2>
+  <div class="table-container">
+    <table class="input-table">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Open</th>
+          <th>High</th>
+          <th>Low</th>
+          <th>Close</th>
+          <th>Volume</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><input type="date" id="new-timestamp" placeholder="Timestamp"></td>
+          <td><input type="number" step="0.01" id="new-open" placeholder="Open"></td>
+          <td><input type="number" step="0.01" id="new-high" placeholder="High"></td>
+          <td><input type="number" step="0.01" id="new-low" placeholder="Low"></td>
+          <td><input type="number" step="0.01" id="new-close" placeholder="Close"></td>
+          <td><input type="number" id="new-volume" placeholder="Volume"></td>
+        </tr>
+      </tbody>
+    </table>
+    <button id="add-stock-data-button">Submit</button>
+  </div>
+  
+  <h2>Past Stock Data</h2>
+  <div class="table-container">
+    <table class="stock-table" id="stock-table">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Open</th>
+          <th>High</th>
+          <th>Low</th>
+          <th>Close</th>
+          <th>Volume</th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const stockCode = urlParams.get('code');
+      let stockChart;
+
+      if (stockCode) {
+        document.getElementById('stock-code').textContent = stockCode;
+        fetch(`/api/stock-detail/${stockCode}`)
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            return response.json();
+          })
+          .then(data => {
+            if (data && data.length > 0) {
+              const stockTableBody = document.getElementById('stock-table').querySelector('tbody');
+              data.forEach(stock => {
+                const row = document.createElement('tr');
+                const timestampCell = document.createElement('td');
+                const formattedTimestamp = new Date(stock.timestamp).toISOString().split('T')[0];
+                timestampCell.textContent = formattedTimestamp;
+                const openCell = document.createElement('td');
+                openCell.textContent = stock.open;
+                const highCell = document.createElement('td');
+                highCell.textContent = stock.high;
+                const lowCell = document.createElement('td');
+                lowCell.textContent = stock.low;
+                const closeCell = document.createElement('td');
+                closeCell.textContent = stock.close;
+                const volumeCell = document.createElement('td');
+                volumeCell.textContent = stock.volume;
+                row.appendChild(timestampCell);
+                row.appendChild(openCell);
+                row.appendChild(highCell);
+                row.appendChild(lowCell);
+                row.appendChild(closeCell);
+                row.appendChild(volumeCell);
+                stockTableBody.appendChild(row);
+              });
+
+              const timestamps = data.map(stock => new Date(stock.timestamp).toISOString().split('T')[0]);
+              const closePrices = data.map(stock => stock.close);
+
+              const ctx = document.getElementById('stock-chart').getContext('2d');
+              stockChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                  labels: timestamps,
+                  datasets: [{
+                    label: 'Close Price',
+                    data: closePrices,
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    borderWidth: 1
+                  }]
+                },
+                options: {
+                  scales: {
+                    x: {
+                      type: 'time',
+                      time: {
+                        unit: 'month',
+                        tooltipFormat: 'MMM yyyy',
+                        displayFormats: {
+                          month: 'MMM yyyy'
+                        }
+                      }
+                    },
+                    y: {
+                      beginAtZero: false
+                    }
+                  }
+                }
+              });
+            } else {
+              console.error('No data available for the given stock code.');
+            }
+          })
+          .catch(error => console.error('Error fetching stock detail:', error));
+
+        document.getElementById('add-stock-data-button').addEventListener('click', function() {
+          const newTimestamp = document.getElementById('new-timestamp').value;
+          const newOpen = document.getElementById('new-open').value;
+          const newHigh = document.getElementById('new-high').value;
+          const newLow = document.getElementById('new-low').value;
+          const newClose = document.getElementById('new-close').value;
+          const newVolume = document.getElementById('new-volume').value;
+
+          if (newTimestamp && newOpen && newHigh && newLow && newClose && newVolume) {
+            fetch('/api/add-stock-data', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                code: stockCode,
+                timestamp: newTimestamp,
+                open: newOpen,
+                high: newHigh,
+                low: newLow,
+                close: newClose,
+                volume: newVolume
+              })
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                alert('Stock data added successfully');
+                document.getElementById('new-timestamp').value = '';
+                document.getElementById('new-open').value = '';
+                document.getElementById('new-high').value = '';
+                document.getElementById('new-low').value = '';
+                document.getElementById('new-close').value = '';
+                document.getElementById('new-volume').value = '';
+
+                fetch(`/api/stock-detail/${stockCode}`)
+                  .then(response => response.json())
+                  .then(data => {
+                    const stockTableBody = document.getElementById('stock-table').querySelector('tbody');
+                    stockTableBody.innerHTML = '';
+                    data.forEach(stock => {
+                      const row = document.createElement('tr');
+                      const timestampCell = document.createElement('td');
+                      const formattedTimestamp = new Date(stock.timestamp).toISOString().split('T')[0];
+                      timestampCell.textContent = formattedTimestamp;
+                      const openCell = document.createElement('td');
+                      openCell.textContent = stock.open;
+                      const highCell = document.createElement('td');
+                      highCell.textContent = stock.high;
+                      const lowCell = document.createElement('td');
+                      lowCell.textContent = stock.low;
+                      const closeCell = document.createElement('td');
+                      closeCell.textContent = stock.close;
+                      const volumeCell = document.createElement('td');
+                      volumeCell.textContent = stock.volume;
+                      row.appendChild(timestampCell);
+                      row.appendChild(openCell);
+                      row.appendChild(highCell);
+                      row.appendChild(lowCell);
+                      row.appendChild(closeCell);
+                      row.appendChild(volumeCell);
+                      stockTableBody.appendChild(row);
+                    });
+
+                    const timestamps = data.map(stock => new Date(stock.timestamp).toISOString().split('T')[0]);
+                    const closePrices = data.map(stock => stock.close);
+                    stockChart.data.labels = timestamps;
+                    stockChart.data.datasets[0].data = closePrices;
+                    stockChart.update();
+                  })
+                  .catch(error => console.error('Error fetching stock detail:', error));
+              } else {
+                alert(`Error adding stock data: ${data.message}`);
+              }
+            })
+            .catch(error => {
+              console.error('Error:', error);
+              alert('Error adding stock data');
+            });
+          } else {
+            alert('Please fill in all fields');
+          }
+        });
+      } else {
+        console.error('No stock code found in the URL.');
+      }
+    });
+  </script>
+</body>
+</html>
