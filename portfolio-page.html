@@ -36,8 +36,8 @@
   <div class="portfolio-details">
     <p><strong>ID:</strong> <span id="portfolio-id"></span></p>
     <p><strong>Name:</strong> <span id="portfolio-name-detail"></span></p>
-    <p><strong>Stock List ID:</strong> <span id="stock-list-id"></span></p>
     <p><strong>Cash Balance:</strong> <span id="cash-balance"></span></p>
+    <p><strong>Portfolio Value:</strong> <span id="portfolio-value"></span></p>
   </div>
 
   <div class="add-cash">
@@ -91,6 +91,7 @@
                   })
                   .then(stockData => {
                     const stockTableBody = document.getElementById('stock-table').querySelector('tbody');
+                    let totalValue = 0;
                     stockData.forEach(stock => {
                       const row = document.createElement('tr');
                       const stockSymbolCell = document.createElement('td');
@@ -100,6 +101,9 @@
                       numSharesCell.id = `num-shares-${stock.stocksymbol}`;
                       const closePriceCell = document.createElement('td');
                       closePriceCell.textContent = stock.close || 'N/A';
+
+                      const stockValue = stock.numshares * stock.close;
+                      totalValue += stockValue;
 
                       const actionCell = document.createElement('td');
                       const numSharesToSellInput = document.createElement('input');
@@ -137,6 +141,9 @@
                               numSharesCell.textContent = newNumShares;
                             }
                             numSharesToSellInput.value = '';
+                            const stockValueAfterSell = newNumShares * stock.close;
+                            totalValue = totalValue - stockValue + stockValueAfterSell;
+                            document.getElementById('portfolio-value').textContent = totalValue.toFixed(2);
                           } else {
                             alert(`Error selling stock: ${data.message}`);
                           }
@@ -152,6 +159,8 @@
                       row.appendChild(actionCell);
                       stockTableBody.appendChild(row);
                     });
+
+                    document.getElementById('portfolio-value').textContent = totalValue.toFixed(2);
                   })
                   .catch(error => console.error('Error fetching stock data:', error));
               }

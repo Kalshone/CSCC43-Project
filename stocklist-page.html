@@ -31,13 +31,13 @@
 <body>
   <h1 id="stocklist-name">Stocklist Page</h1>
   <div class="stocklist-details">
-    <p><strong>ID:</strong> <span id="stocklist-id"></span></p>
     <p><strong>Name:</strong> <span id="stocklist-name-detail"></span></p>
     <p><strong>Visibility:</strong></p>
     <input type="radio" id="public" name="visibility" value="Public" disabled>
     <label for="public">Public</label>
     <input type="radio" id="private" name="visibility" value="Private" disabled>
     <label for="private">Private</label>
+    <p><strong>Total Stocklist Value:</strong> <span id="stocklist-value"></span></p>
   </div>
   <table class="stock-table" id="stock-table">
     <thead>
@@ -67,7 +67,6 @@
           .then(data => {
             if (data) {
               document.getElementById('stocklist-name').textContent = data.name || 'Unnamed Stocklist';
-              document.getElementById('stocklist-id').textContent = data.stocklistid || 'N/A';
               document.getElementById('stocklist-name-detail').textContent = data.name || 'N/A';
               if (data.ispublic) {
                 document.getElementById('public').checked = true;
@@ -114,6 +113,8 @@
                 })
                 .then(stockData => {
                   const stockTableBody = document.getElementById('stock-table').querySelector('tbody');
+                  let totalValue = 0;
+
                   stockData.forEach(stock => {
                     const row = document.createElement('tr');
                     const stockSymbolCell = document.createElement('td');
@@ -122,11 +123,17 @@
                     numSharesCell.textContent = stock.numshares;
                     const closePriceCell = document.createElement('td');
                     closePriceCell.textContent = stock.close || 'N/A';
+
+                    const stockValue = stock.numshares * stock.close;
+                    totalValue += stockValue;
+
                     row.appendChild(stockSymbolCell);
                     row.appendChild(numSharesCell);
                     row.appendChild(closePriceCell);
                     stockTableBody.appendChild(row);
                   });
+
+                  document.getElementById('stocklist-value').textContent = totalValue.toFixed(2);
                 })
                 .catch(error => console.error('Error fetching stock data:', error));
             } else {
