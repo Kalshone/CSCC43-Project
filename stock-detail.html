@@ -16,18 +16,18 @@
       width: 100%;
       overflow-x: auto;
     }
-    .stock-table, .input-table {
+    .stock-table, .input-table, .stats-table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 20px;
       table-layout: fixed;
     }
-    .stock-table th, .stock-table td, .input-table th, .input-table td {
+    .stock-table th, .stock-table td, .input-table th, .input-table td, .stats-table th, .stats-table td {
       border: 1px solid #ccc;
       padding: 10px;
       text-align: left;
     }
-    .stock-table th, .input-table th {
+    .stock-table th, .input-table th, .stats-table th {
       background-color: #f4f4f4;
     }
     .input-table td {
@@ -45,6 +45,36 @@
 
   <h2>Stock Price Over Time</h2>
   <canvas id="stock-chart"></canvas>
+
+  <h2>Stock Statistics</h2>
+  <div class="table-container">
+    <table class="stats-table">
+      <thead>
+        <tr>
+          <th>Statistic (Description)</th>
+          <th>Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Average Return (Reward)</td>
+          <td id="avg-return-value"></td>
+        </tr>
+        <tr>
+          <td>Variance (Risk)</td>
+          <td id="variance-value"></td>
+        </tr>
+        <tr>
+          <td>Standard Deviation (Risk)</td>
+          <td id="stddev-value"></td>
+        </tr>
+        <tr>
+          <td>Coefficient of Variation (Volatility)</td>
+          <td id="cov-value"></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 
   <h2>Add New Stock Data</h2>
   <div class="table-container">
@@ -167,6 +197,16 @@
                   }
                 }
               });
+
+              fetch(`/api/stock-stats/${stockCode}`)
+                .then(response => response.json())
+                .then(stats => {
+                  document.getElementById('avg-return-value').textContent = (stats.averageReturn * 100).toFixed(2) + '%';
+                  document.getElementById('variance-value').textContent = stats.variance.toFixed(2);
+                  document.getElementById('stddev-value').textContent = stats.stddev.toFixed(2);
+                  document.getElementById('cov-value').textContent = stats.cov.toFixed(2);
+                })
+                .catch(error => console.error('Error fetching stock statistics:', error));
             } else {
               console.error('No data available for the given stock code.');
             }
@@ -242,6 +282,17 @@
                     stockChart.data.labels = timestamps;
                     stockChart.data.datasets[0].data = closePrices;
                     stockChart.update();
+
+                    fetch(`/api/stock-stats/${stockCode}`)
+                    .then(response => response.json())
+                    .then(stats => {
+                    document.getElementById('avg-return-value').textContent = isNaN(stats.averageReturn) ? 'N/A' : (stats.averageReturn * 100).toFixed(2) + '%';
+                    document.getElementById('variance-value').textContent = isNaN(stats.variance) ? 'N/A' : stats.variance.toFixed(2);
+                    document.getElementById('stddev-value').textContent = isNaN(stats.stddev) ? 'N/A' : stats.stddev.toFixed(2);
+                    document.getElementById('cov-value').textContent = isNaN(stats.cov) ? 'N/A' : stats.cov.toFixed(2);
+                    })
+                    .catch(error => console.error('Error fetching stock statistics:', error));
+
                   })
                   .catch(error => console.error('Error fetching stock detail:', error));
               } else {

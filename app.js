@@ -901,6 +901,151 @@ app.post('/api/add-stock-data', (req, res) => {
       res.status(401).send('Unauthorized');
     }
   });
+
+  // Calculate stock statistics
+// Calculate stock statistics
+app.get('/api/stock-stats/:code', (req, res) => {
+  const stockCode = req.params.code;
+
+  const query = 'SELECT * FROM stockdata WHERE code = $1 ORDER BY timestamp ASC';
+  client.query(query, [stockCode], (err, result) => {
+    if (err) {
+      console.error('Error fetching stock data:', err);
+      return res.status(500).send('Error fetching stock data');
+    }
+
+    if (result.rows.length === 0) {
+      return res.status(404).send('No stock data found for the given code');
+    }
+
+    const prices = result.rows.map(row => parseFloat(row.close));
+    const returns = [];
+
+    for (let i = 1; i < prices.length; i++) {
+      const dailyReturn = (prices[i] - prices[i - 1]) / prices[i - 1];
+      returns.push(dailyReturn);
+    }
+
+    const averageReturn = returns.reduce((acc, curr) => acc + curr, 0) / returns.length;
+    const variance = returns.reduce((acc, curr) => acc + Math.pow(curr - averageReturn, 2), 0) / (returns.length - 1);
+    const stddev = Math.sqrt(variance);
+    const cov = stddev / averageReturn;
+
+    res.json({
+      averageReturn: isNaN(averageReturn) ? 0 : averageReturn,
+      variance: isNaN(variance) ? 0 : variance,
+      stddev: isNaN(stddev) ? 0 : stddev,
+      cov: isNaN(cov) ? 0 : cov
+    });
+  });
+});
+
+
+  // Calculate portfolio risk and return
+// Calculate portfolio risk, return, and average return
+app.get('/api/portfolio-stats/:id', (req, res) => {
+  const portfolioId = parseInt(req.params.id, 10);
+
+  const query = `
+    SELECT sh.stocksymbol, sh.numshares, sd.close, sd.open
+    FROM Stocklistholdings slh
+    JOIN Stockholdings sh ON slh.stockholdingid = sh.stockholdingid
+    LEFT JOIN LATERAL (
+      SELECT close, open
+      FROM stockdata sd
+      WHERE sd.code = sh.stocksymbol
+      ORDER BY sd.timestamp DESC
+      LIMIT 1
+    ) sd ON true
+    WHERE slh.stocklistid = (
+      SELECT stocklistid FROM Portfolios WHERE portfolioid = $1
+    );
+  `;
+
+  client.query(query, [portfolioId], (err, result) => {
+    if (err) {
+      console.error('Error fetching portfolio stats:', err);
+      return res.status(500).send('Error fetching portfolio stats');
+    }
+
+    const stocks = result.rows;
+    if (stocks.length === 0) {
+      return res.status(404).send('Portfolio not found or empty');
+    }
+
+    // Calculate risk and return metrics here
+    const returns = stocks.map(stock => (parseFloat(stock.close) - parseFloat(stock.open)) / parseFloat(stock.open));
+    const averageReturn = returns.reduce((sum, value) => sum + value, 0) / returns.length;
+    const variance = returns.reduce((sum, value) => sum + Math.pow(value - averageReturn, 2), 0) / returns.length;
+    const stddev = Math.sqrt(variance);
+    const cov = stddev / averageReturn;
+
+    res.json({
+      averageReturn,
+      variance,
+      stddev,
+      cov
+    });
+  });
+});
+
+// compare stocks correlation and covariation
+app.get('/api/compare-stocks/:stock1/:stock2', (req, res) => {
+  const stock1 = req.params.stock1;
+  const stock2 = req.params.stock2;
+
+  if (!stock1 || !stock2 || stock1 === stock2) {
+    return res.status(400).send({ success: false, message: 'Invalid stock selection' });
+  }
+
+  const query = `
+    SELECT timestamp::date as date, code, close
+    FROM stockdata
+    WHERE code = $1 OR code = $2
+    ORDER BY date ASC
+  `;
+
+  client.query(query, [stock1, stock2], (err, result) => {
+    if (err) {
+      console.error('Error fetching stock data:', err);
+      return res.status(500).send({ success: false, message: 'Error fetching stock data' });
+    }
+
+    const stock1Data = {};
+    const stock2Data = {};
+
+    result.rows.forEach(row => {
+      if (row.code === stock1) {
+        stock1Data[row.date] = parseFloat(row.close);
+      } else if (row.code === stock2) {
+        stock2Data[row.date] = parseFloat(row.close);
+      }
+    });
+
+    const sharedDates = Object.keys(stock1Data).filter(date => date in stock2Data);
+    const stock1Prices = sharedDates.map(date => stock1Data[date]);
+    const stock2Prices = sharedDates.map(date => stock2Data[date]);
+
+    if (stock1Prices.length === 0 || stock2Prices.length === 0) {
+      return res.status(404).send({ success: false, message: 'Not enough shared data points for comparison' });
+    }
+
+    const mean1 = stock1Prices.reduce((acc, val) => acc + val, 0) / stock1Prices.length;
+    const mean2 = stock2Prices.reduce((acc, val) => acc + val, 0) / stock2Prices.length;
+
+    const covariation = stock1Prices.reduce((acc, val, idx) => acc + ((val - mean1) * (stock2Prices[idx] - mean2)), 0) / (stock1Prices.length - 1);
+    const stddev1 = Math.sqrt(stock1Prices.reduce((acc, val) => acc + Math.pow(val - mean1, 2), 0) / (stock1Prices.length - 1));
+    const stddev2 = Math.sqrt(stock2Prices.reduce((acc, val) => acc + Math.pow(val - mean2, 2), 0) / (stock2Prices.length - 1));
+    const correlation = covariation / (stddev1 * stddev2);
+
+    res.json({
+      success: true,
+      covariation,
+      correlation
+    });
+  });
+});
+
   
   //logout
   app.get("/logout", (req, res) => {
