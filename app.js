@@ -262,6 +262,100 @@ app.put('/api/stocklist/:id/visibility', (req, res) => {
   });
 });
 
+// fetch stocks in stocklist and most recent close price
+app.get('/api/stocklist/:id/stocks', (req, res) => {
+  const stocklistId = parseInt(req.params.id, 10);
+
+  if (isNaN(stocklistId)) {
+    return res.status(400).send('Invalid stocklist ID');
+  }
+
+  const query = `
+    SELECT sh.stocksymbol, sh.numshares, sd.close
+    FROM Stocklistholdings slh
+    JOIN Stockholdings sh ON slh.stockholdingid = sh.stockholdingid
+    LEFT JOIN LATERAL (
+      SELECT close
+      FROM stockdata sd
+      WHERE sd.code = sh.stocksymbol
+      ORDER BY sd.timestamp DESC
+      LIMIT 1
+    ) sd ON true
+    WHERE slh.stocklistid = $1;
+  `;
+
+  client.query(query, [stocklistId], (err, result) => {
+    if (err) {
+      console.error('Error fetching stocklist stocks:', err);
+      res.status(500).send('Error fetching stocklist stocks');
+    } else {
+      res.json(result.rows);
+    }
+  });
+});
+
+
+// add stocks to stocklist (create stockholding if not exists)
+app.post('/api/add-to-stocklist', (req, res) => {
+  const { stockSymbol, numShares, stocklistId } = req.body;
+
+  const checkStockholdingQuery = 'SELECT stockholdingid FROM Stockholdings WHERE stocksymbol = $1 AND numshares = $2';
+  client.query(checkStockholdingQuery, [stockSymbol, numShares], (err, result) => {
+    if (err) {
+      console.error('Error checking stockholding:', err);
+      return res.status(500).send({ success: false, message: 'Error checking stockholding' });
+    }
+
+    if (result.rows.length > 0) {
+      const stockholdingId = result.rows[0].stockholdingid;
+
+      const checkStocklistHoldingQuery = 'SELECT * FROM Stocklistholdings WHERE stocklistid = $1 AND stockholdingid = $2';
+      client.query(checkStocklistHoldingQuery, [stocklistId, stockholdingId], (err, result) => {
+        if (err) {
+          console.error('Error checking stocklistholding:', err);
+          return res.status(500).send({ success: false, message: 'Error checking stocklistholding' });
+        }
+
+        if (result.rows.length > 0) {
+          return res.status(400).send({ success: false, message: 'Stockholding already exists in the stocklist' });
+        } else {
+          
+          const addStocklistHoldingQuery = 'INSERT INTO Stocklistholdings (stocklistid, stockholdingid) VALUES ($1, $2)';
+          client.query(addStocklistHoldingQuery, [stocklistId, stockholdingId], (err, result) => {
+            if (err) {
+              console.error('Error adding stockholding to stocklist:', err);
+              return res.status(500).send({ success: false, message: 'Error adding stockholding to stocklist' });
+            }
+
+            return res.send({ success: true });
+          });
+        }
+      });
+    } else {
+      
+      const createStockholdingQuery = 'INSERT INTO Stockholdings (stocksymbol, numshares) VALUES ($1, $2) RETURNING stockholdingid';
+      client.query(createStockholdingQuery, [stockSymbol, numShares], (err, result) => {
+        if (err) {
+          console.error('Error creating stockholding:', err);
+          return res.status(500).send({ success: false, message: 'Error creating stockholding' });
+        }
+
+        const stockholdingId = result.rows[0].stockholdingid;
+        const addStocklistHoldingQuery = 'INSERT INTO Stocklistholdings (stocklistid, stockholdingid) VALUES ($1, $2)';
+        client.query(addStocklistHoldingQuery, [stocklistId, stockholdingId], (err, result) => {
+          if (err) {
+            console.error('Error adding stockholding to stocklist:', err);
+            return res.status(500).send({ success: false, message: 'Error adding stockholding to stocklist' });
+          }
+
+          return res.send({ success: true });
+        });
+      });
+    }
+  });
+});
+
+
 // fetch user's stocklists
 app.get('/api/stocklists', (req, res) => {
   if (req.session.user) {
@@ -337,6 +431,25 @@ app.get('/api/public-stocklists', (req, res) => {
       res.redirect("/");
     }
   });
+
+// fetch stocks and most recent close price
+app.get('/api/stocks', (req, res) => {
+  const query = `
+    SELECT DISTINCT ON (code) code, close
+    FROM stockdata
+    ORDER BY code, timestamp DESC;
+  `;
+
+  client.query(query, (err, result) => {
+    if (err) {
+      console.error('Error executing query', err);
+      res.status(500).send('Error fetching stock data');
+    } else {
+      res.json(result.rows);
+    }
+  });
+});
+
 
   app.get("/friends", (req, res) => {
     if (req.session.user) {
