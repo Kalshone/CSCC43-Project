@@ -21,7 +21,8 @@
       flex: 1;
     }
     .stock-item input,
-    .stock-item select {
+    .stock-item select,
+    .stock-item button {
       margin-left: 10px;
     }
   </style>
@@ -78,12 +79,44 @@
             addOption.disabled = true;
             addOption.selected = true;
             addToStocklistSelect.appendChild(addOption);
-            const filteredStocklists = stocklists.filter(stocklist => !portfolioStocklistIds.includes(stocklist.stocklistid));
+            const filteredStocklists = stocklists.filter(stocklist => !portfolioStocklistIds.includes(stocklist.stocklistid));  
             filteredStocklists.forEach(stocklist => {
               const option = document.createElement('option');
               option.value = stocklist.stocklistid;
               option.textContent = stocklist.name;
               addToStocklistSelect.appendChild(option);
+            });
+
+            buySelect.addEventListener('change', () => {
+              const portfolioId = buySelect.value;
+              const numShares = sharesInput.value;
+
+              if (numShares > 0 && portfolioId) {
+                fetch('/api/buy-stock', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    stockSymbol: stock.code,
+                    numShares: numShares,
+                    portfolioId: portfolioId
+                  })
+                })
+                .then(response => response.json())
+                .then(data => {
+                  if (data.success) {
+                    alert('Stock bought successfully');
+                    buySelect.selectedIndex = 0;
+                    sharesInput.value = '';
+                  } else {
+                    alert(`Error buying stock: ${data.message}`);
+                  }
+                })
+                .catch(error => console.error('Error:', error));
+              } else {
+                alert('Please enter a valid number of shares and select a portfolio');
+              }
             });
 
             addToStocklistSelect.addEventListener('change', () => {

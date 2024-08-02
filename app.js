@@ -217,6 +217,178 @@ app.put('/api/portfolio/:id/add-cash', (req, res) => {
   });
 });
 
+// buy stock
+app.post('/api/buy-stock', (req, res) => {
+  const { stockSymbol, numShares, portfolioId } = req.body;
+
+  if (isNaN(numShares) || numShares <= 0) {
+    return res.status(400).send({ success: false, message: 'Invalid number of shares' });
+  }
+
+  const getStockPriceQuery = `
+    SELECT close
+    FROM stockdata
+    WHERE code = $1
+    ORDER BY timestamp DESC
+    LIMIT 1
+  `;
+
+  const getPortfolioQuery = 'SELECT * FROM Portfolios WHERE portfolioid = $1';
+  const createStockholdingQuery = 'INSERT INTO Stockholdings (stocksymbol, numshares) VALUES ($1, $2) RETURNING stockholdingid';
+  const addStocklistHoldingQuery = 'INSERT INTO Stocklistholdings (stocklistid, stockholdingid) VALUES ($1, $2)';
+  const updatePortfolioQuery = 'UPDATE Portfolios SET cashbalance = $1 WHERE portfolioid = $2';
+
+  client.query(getStockPriceQuery, [stockSymbol], (err, stockResult) => {
+    if (err) {
+      console.error('Error fetching stock price:', err);
+      return res.status(500).send({ success: false, message: 'Error fetching stock price' });
+    }
+    if (stockResult.rows.length === 0) {
+      return res.status(404).send({ success: false, message: 'Stock not found' });
+    }
+    const stockPrice = stockResult.rows[0].close;
+    const totalCost = stockPrice * numShares;
+    client.query(getPortfolioQuery, [portfolioId], (err, portfolioResult) => {
+      if (err) {
+        console.error('Error fetching portfolio:', err);
+        return res.status(500).send({ success: false, message: 'Error fetching portfolio' });
+      }
+
+      if (portfolioResult.rows.length === 0) {
+        return res.status(404).send({ success: false, message: 'Portfolio not found' });
+      }
+
+      const portfolio = portfolioResult.rows[0];
+      const newCashBalance = portfolio.cashbalance - totalCost;
+
+      if (newCashBalance < 0) {
+        return res.status(400).send({ success: false, message: 'Insufficient funds in portfolio' });
+      }
+      client.query(createStockholdingQuery, [stockSymbol, numShares], (err, stockholdingResult) => {
+        if (err) {
+          console.error('Error creating stockholding:', err);
+          return res.status(500).send({ success: false, message: 'Error creating stockholding' });
+        }
+
+        const stockholdingId = stockholdingResult.rows[0].stockholdingid;
+        client.query(addStocklistHoldingQuery, [portfolio.stocklistid, stockholdingId], (err) => {
+          if (err) {
+            console.error('Error adding stockholding to stocklist:', err);
+            return res.status(500).send({ success: false, message: 'Error adding stockholding to stocklist' });
+          }
+          client.query(updatePortfolioQuery, [newCashBalance, portfolioId], (err) => {
+            if (err) {
+              console.error('Error updating portfolio cash balance:', err);
+              return res.status(500).send({ success: false, message: 'Error updating portfolio cash balance' });
+            }
+
+            res.send({ success: true, newCashBalance });
+          });
+        });
+      });
+    });
+  });
+});
+
+// sell stocks
+app.post('/api/sell-stock', (req, res) => {
+  const { stockSymbol, numShares, portfolioId } = req.body;
+
+  if (isNaN(numShares) || numShares <= 0) {
+    return res.status(400).send({ success: false, message: 'Invalid number of shares' });
+  }
+
+  const getStockPriceQuery = `
+    SELECT close
+    FROM stockdata
+    WHERE code = $1
+    ORDER BY timestamp DESC
+    LIMIT 1
+  `;
+
+  const getPortfolioQuery = 'SELECT * FROM Portfolios WHERE portfolioid = $1';
+  const updateStockholdingQuery = 'UPDATE Stockholdings SET numshares = numshares - $1 WHERE stocksymbol = $2 AND numshares >= $1 RETURNING stockholdingid, numshares';
+  const deleteStocklistHoldingQuery = 'DELETE FROM Stocklistholdings WHERE stockholdingid = $1';
+  const deleteStockholdingQuery = 'DELETE FROM Stockholdings WHERE stockholdingid = $1';
+  const updatePortfolioQuery = 'UPDATE Portfolios SET cashbalance = $1 WHERE portfolioid = $2';
+
+  client.query(getStockPriceQuery, [stockSymbol], (err, stockResult) => {
+    if (err) {
+      console.error('Error fetching stock price:', err);
+      return res.status(500).send({ success: false, message: 'Error fetching stock price' });
+    }
+
+    if (stockResult.rows.length === 0) {
+      return res.status(404).send({ success: false, message: 'Stock not found' });
+    }
+
+    const stockPrice = parseFloat(stockResult.rows[0].close);
+    const totalRevenue = stockPrice * numShares;
+
+    client.query(getPortfolioQuery, [portfolioId], (err, portfolioResult) => {
+      if (err) {
+        console.error('Error fetching portfolio:', err);
+        return res.status(500).send({ success: false, message: 'Error fetching portfolio' });
+      }
+
+      if (portfolioResult.rows.length === 0) {
+        return res.status(404).send({ success: false, message: 'Portfolio not found' });
+      }
+
+      const portfolio = portfolioResult.rows[0];
+      const newCashBalance = parseFloat(portfolio.cashbalance) + totalRevenue;
+
+      client.query(updateStockholdingQuery, [numShares, stockSymbol], (err, stockholdingResult) => {
+        if (err) {
+          console.error('Error updating stockholding:', err);
+          return res.status(500).send({ success: false, message: 'Error updating stockholding' });
+        }
+
+        if (stockholdingResult.rows.length === 0) {
+          return res.status(400).send({ success: false, message: 'Not enough shares to sell' });
+        }
+
+        const updatedStockholding = stockholdingResult.rows[0];
+
+        if (updatedStockholding.numshares === 0) {
+          client.query(deleteStocklistHoldingQuery, [updatedStockholding.stockholdingid], (err) => {
+            if (err) {
+              console.error('Error deleting stocklist holding:', err);
+              return res.status(500).send({ success: false, message: 'Error deleting stocklist holding' });
+            }
+
+            client.query(deleteStockholdingQuery, [updatedStockholding.stockholdingid], (err) => {
+              if (err) {
+                console.error('Error deleting stockholding:', err);
+                return res.status(500).send({ success: false, message: 'Error deleting stockholding' });
+              }
+
+              client.query(updatePortfolioQuery, [newCashBalance, portfolioId], (err) => {
+                if (err) {
+                  console.error('Error updating portfolio cash balance:', err);
+                  return res.status(500).send({ success: false, message: 'Error updating portfolio cash balance' });
+                }
+
+                res.send({ success: true, newCashBalance });
+              });
+            });
+          });
+        } else {
+          client.query(updatePortfolioQuery, [newCashBalance, portfolioId], (err) => {
+            if (err) {
+              console.error('Error updating portfolio cash balance:', err);
+              return res.status(500).send({ success: false, message: 'Error updating portfolio cash balance' });
+            }
+
+            res.send({ success: true, newCashBalance });
+          });
+        }
+      });
+    });
+  });
+});
+
+
 
 
   // stocklist page

@@ -53,7 +53,8 @@
         <tr>
           <th>Stock Symbol</th>
           <th>Number of Shares</th>
-          <th>Most Recent Close Price</th>
+          <th>Most Recent Close Price (per share)</th>
+          <th>Action</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -78,7 +79,6 @@
               document.getElementById('portfolio-name').textContent = data.name || 'Unnamed Portfolio';
               document.getElementById('portfolio-id').textContent = data.portfolioid || 'N/A';
               document.getElementById('portfolio-name-detail').textContent = data.name || 'N/A';
-              document.getElementById('stock-list-id').textContent = data.stocklistid || 'N/A';
               document.getElementById('cash-balance').textContent = data.cashbalance || 'N/A';
 
               if (data.stocklistid) {
@@ -97,11 +97,59 @@
                       stockSymbolCell.textContent = stock.stocksymbol;
                       const numSharesCell = document.createElement('td');
                       numSharesCell.textContent = stock.numshares;
+                      numSharesCell.id = `num-shares-${stock.stocksymbol}`;
                       const closePriceCell = document.createElement('td');
                       closePriceCell.textContent = stock.close || 'N/A';
+
+                      const actionCell = document.createElement('td');
+                      const numSharesToSellInput = document.createElement('input');
+                      numSharesToSellInput.type = 'number';
+                      numSharesToSellInput.placeholder = 'Shares';
+                      const sellButton = document.createElement('button');
+                      sellButton.textContent = 'Sell';
+                      sellButton.addEventListener('click', () => {
+                        const numSharesToSell = parseInt(numSharesToSellInput.value, 10);
+                        if (isNaN(numSharesToSell) || numSharesToSell <= 0 || numSharesToSell > parseInt(numSharesCell.textContent, 10)) {
+                          alert('Please enter a valid number of shares to sell.');
+                          return;
+                        }
+
+                        fetch('/api/sell-stock', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json'
+                          },
+                          body: JSON.stringify({
+                            stockSymbol: stock.stocksymbol,
+                            numShares: numSharesToSell,
+                            portfolioId: portfolioId
+                          })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                          if (data.success) {
+                            alert('Stock sold successfully');
+                            document.getElementById('cash-balance').textContent = data.newCashBalance;
+                            const newNumShares = parseInt(numSharesCell.textContent, 10) - numSharesToSell;
+                            if (newNumShares <= 0) {
+                              row.remove();
+                            } else {
+                              numSharesCell.textContent = newNumShares;
+                            }
+                            numSharesToSellInput.value = '';
+                          } else {
+                            alert(`Error selling stock: ${data.message}`);
+                          }
+                        })
+                        .catch(error => console.error('Error:', error));
+                      });
+                      actionCell.appendChild(numSharesToSellInput);
+                      actionCell.appendChild(sellButton);
+
                       row.appendChild(stockSymbolCell);
                       row.appendChild(numSharesCell);
                       row.appendChild(closePriceCell);
+                      row.appendChild(actionCell);
                       stockTableBody.appendChild(row);
                     });
                   })
