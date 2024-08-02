@@ -51,6 +51,24 @@
     </tbody>
   </table>
 
+  <div class="section form-section">
+    <h2>Request a Review on this Stocklist</h2>
+    <form action="/request-review" method="post">
+      <input type="email" 
+      name="userEmail" 
+      placeholder="User's Email" 
+      required id="review-request-input" />
+      <input type="hidden" name="stockListId" id="stocklist-id-input" />
+      <button type="button" id="request-review-button">Request Review</button>
+    </form>
+  </div>  
+
+  <div class="section">
+    <h2>Reviews on this Stocklist</h2>
+    <ul id="stocklist-reviews">
+      <!-- List of reviews on this stocklist will be added here -->
+    </ul>
+
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const urlParams = new URLSearchParams(window.location.search);
@@ -139,12 +157,58 @@
             } else {
               console.error('No data returned for stocklist details.');
             }
+
+
+            fetch(`/api/reviews?stockListID=${stocklistID}`)
+              .then(response => response.json())
+              .then(reviews => {
+                const reviewsList = document.getElementById('stocklist-reviews');
+                reviews.forEach(review => {
+                  const li = document.createElement('li');
+                  li.textContent = `${review.email}: ${review.reviewText}`;
+                  reviewsList.appendChild(li);
+                });
+              })
+              .catch(error => console.error('Error fetching reviews:', error));
           })
           .catch(error => console.error('Error fetching stocklist details:', error));
+
+          
+
+
+          // Add friend request functionality
+          const reviewRequestInput = document.getElementById('review-request-input');
+          const sendRequestButton = document.getElementById('request-review-button');
+
+          sendRequestButton.addEventListener('click', () => {
+            const email = reviewRequestInput.value.trim();
+            if (email) {
+              console.log('Sending review request to:', email);
+              sendReviewRequest(email, stocklistId);
+              reviewRequestInput.value = '';
+            }
+          });
       } else {
         console.error('No stocklist ID found in the URL.');
       }
     });
+
+
+    function sendReviewRequest(email, stocklistId) {
+        fetch('/api/request-review', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ email: email, stockListId: stocklistId, reviewText: "" })
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Review request sent:', data);
+          alert('Review request sent successfully');
+        })
+        .catch(error => console.error('Error sending review request:', error));
+      }
   </script>
 </body>
 </html>

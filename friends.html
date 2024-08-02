@@ -123,6 +123,13 @@
             data.friends.forEach((friend) => {
               const listItem = document.createElement("li");
               listItem.textContent = `${friend.name} (${friend.friendemail})`;
+              
+              const deleteButton = document.createElement('button');
+              deleteButton.textContent = 'Delete';
+              deleteButton.onclick = () => deleteFriend(friend.friendemail);
+
+              listItem.appendChild(deleteButton);
+
               friendsList.appendChild(listItem);
             });
           })
@@ -141,7 +148,12 @@
         })
         .then(response => response.json())
         .then(data => {
+          if (data.error) {
+            alert(data.error);
+            return;
+          }
           console.log('Friend request sent:', data);
+          alert('Friend request sent successfully');
           fetchFriendsList(); // Reload friends list
           fetchPendingRequests();
         })
@@ -213,6 +225,22 @@
           fetchPendingRequests();
         })
         .catch(error => console.error('Error declining friend request:', error));
+      }
+
+      function deleteFriend(friendEmail) {
+        fetch('/api/delete-friend', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ friendEmail })
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Friend deleted:', data);
+          fetchFriendsList();
+        })
+        .catch(error => console.error('Error deleting friend:', error));
       }
     </script>
   </body>

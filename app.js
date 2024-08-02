@@ -649,7 +649,6 @@ app.get('/api/public-stocklists', (req, res) => {
         WHERE Reviews.email = $1
       `;
       client.query(query, [email], (err, result) => {
-        console.log(result.rows);
         if (err) {
           console.error('Error executing query', err);
           res.status(500).send('Error fetching reviews');
@@ -720,18 +719,17 @@ app.get('/api/public-stocklists', (req, res) => {
     });
   });
 
-  //request a review
   app.post("/api/request-review", (req, res) => {
     if (req.session.user) {
-      stockListID = 4;
-      const email = req.body;
-      const reviewText = "";
+      const { email, stockListId, reviewText } = req.body;
+  
       const query = `
         INSERT INTO Reviews (email, stockListID, reviewText)
         VALUES ($1, $2, $3)
         RETURNING *
       `;
-      client.query(query, [email, stockListID, reviewText], (err, result) => {
+  
+      client.query(query, [email, stockListId, reviewText], (err, result) => {
         if (err) {
           console.error("Error executing query", err);
           res.status(500).send("Error requesting review");
@@ -742,6 +740,26 @@ app.get('/api/public-stocklists', (req, res) => {
     } else {
       res.status(401).send("Unauthorized");
     }
+  });
+
+  app.get("/api/reviews/", (req, res) => {
+    const stockListId = req.query.stockListId;
+  
+    const query = `
+      SELECT Reviews.reviewID, Reviews.reviewText, Users.name
+      FROM Reviews
+      JOIN Users ON Reviews.email = Users.email
+      WHERE Reviews.stockListID = $1
+    `;
+  
+    client.query(query, [stockListId], (err, result) => {
+      if (err) {
+        console.error("Error executing query", err);
+        res.status(500).send("Error fetching reviews");
+      } else {
+        res.json(result.rows);
+      }
+    });
   });
 
   //see stocks
@@ -815,6 +833,40 @@ app.post('/api/add-stock-data', (req, res) => {
     }
   });
 
+  app.post('/api/delete-friend', (req, res) => {
+    if (req.session.user) {
+      const email = req.session.user.email;
+      const friendEmail = req.body.friendEmail;
+      const query = `
+        DELETE FROM Friends
+        WHERE (email1 = $1 AND email2 = $2) OR (email1 = $2 AND email2 = $1)
+      `;
+      client.query(query, [email, friendEmail], (err, result) => {
+        if (err) {
+          console.error('Error executing query', err);
+          res.status(500).send('Error deleting friend');
+        } else {
+          const insertDeclinedRequestQuery = `
+            INSERT INTO FriendRequests (requestemail, receiveemail, status, timestamp)
+            VALUES ($1, $2, 'declined', CURRENT_TIMESTAMP)
+          `;
+          client.query(insertDeclinedRequestQuery, [friendEmail, email], (err, result) => {
+            if (err) {
+              console.error('Error executing insert query', err);
+              res.status(500).send('Error adding declined friend request');
+            } else {
+              res.json({ message: 'Friend deleted and declined friend request added successfully' });
+            }
+          });
+          
+          // res.json({ message: 'Friend deleted successfully' });
+        }
+      });
+    } else {
+      res.status(401).send('Unauthorized');
+    }
+  });
+
   app.get("/api/friends-list", (req, res) => {
     if (req.session.user) {
       const email = req.session.user.email;
@@ -848,13 +900,26 @@ app.post('/api/add-stock-data', (req, res) => {
     if (req.session.user) {
       const { receiveemail } = req.body;
       const senderemail = req.session.user.email;
+
+      if (receiveemail  === senderemail) {  
+        return res.status(200).json({ error: 'You cannot send a friend request to yourself' });
+      }
+
+      // Log the request body
+      console.log('Request body:', req.body);
+
+      // Validate the request body
+      if (!receiveemail) {
+        return res.status(400).json({ error: 'receiveemail is required' });
+      }
   
       const checkReciprocalQuery = `
         SELECT * FROM FriendRequests
-        WHERE requestemail = $1 AND receiveemail = $2 AND status = 'Pending'
+        WHERE requestemail = $1 AND receiveemail = $2 AND (status = 'Pending' OR status = 'declined')
       `;
   
       client.query(checkReciprocalQuery, [receiveemail, senderemail], (err, result) => {
+        console.log('Reciprocal Query Result:', result.rows);
         if (err) {
           console.error('Error checking reciprocal friend request:', err);
           res.status(500).send('Internal Server Error');
@@ -886,20 +951,61 @@ app.post('/api/add-stock-data', (req, res) => {
             }
           });
         } else {
-          // No reciprocal friend request, insert new friend request
-          const insertRequestQuery = `
-            INSERT INTO FriendRequests (requestemail, receiveemail, status)
-            VALUES ($1, $2, 'Pending')
-            ON CONFLICT (requestemail, receiveemail) DO NOTHING
+          // Check if there is a declined friend request
+          const checkDeclinedRequestQuery = `
+          SELECT timestamp
+          FROM FriendRequests
+          WHERE requestemail = $1 AND receiveemail = $2 AND status = 'declined'
           `;
-  
-          client.query(insertRequestQuery, [senderemail, receiveemail], (err) => {
-            if (err) {
-              console.error('Error sending friend request:', err);
-              res.status(500).send('Internal Server Error');
+
+          client.query(checkDeclinedRequestQuery, [senderemail, receiveemail], (err, result) => {
+          if (err) {
+            console.error('Error checking declined friend request:', err);
+            res.status(500).send('Internal Server Error');
+          } else if (result.rows.length > 0) {
+            const declinedTimestamp = new Date(result.rows[0].timestamp);
+            // Print the timestamp
+            console.log('Declined Timestamp:', declinedTimestamp);
+
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+            console.log('Five Minutes Ago:', fiveMinutesAgo);
+
+            if (declinedTimestamp > fiveMinutesAgo) {
+              res.status(200).json({ error: 'This user declined your friend request or unfriended you less than 5 minutes ago.' });
             } else {
-              res.json({ message: 'Friend request sent' });
+              // Update the status to 'Pending'
+              const updateRequestQuery = `
+                UPDATE FriendRequests
+                SET status = 'Pending', timestamp = CURRENT_TIMESTAMP
+                WHERE requestemail = $1 AND receiveemail = $2
+              `;
+
+              client.query(updateRequestQuery, [senderemail, receiveemail], (err) => {
+                if (err) {
+                  console.error('Error updating friend request:', err);
+                  res.status(500).json({ error: 'Internal Server Error' });
+                } else {
+                  res.json({ message: 'Friend request sent' });
+                }
+              });
             }
+          } else {
+            // No reciprocal friend request, insert new friend request
+            const insertRequestQuery = `
+              INSERT INTO FriendRequests (requestemail, receiveemail, status)
+              VALUES ($1, $2, 'Pending')
+              ON CONFLICT (requestemail, receiveemail) DO NOTHING
+            `;
+
+            client.query(insertRequestQuery, [senderemail, receiveemail], (err) => {
+              if (err) {
+                console.error('Error sending friend request:', err);
+                res.status(500).send('Internal Server Error');
+              } else {
+                res.json({ message: 'Friend request sent' });
+              }
+            });
+          }
           });
         }
       });
@@ -979,7 +1085,7 @@ app.post('/api/add-stock-data', (req, res) => {
   
       const query = `
         UPDATE FriendRequests
-        SET status = 'declined'
+        SET status = 'declined', timestamp = CURRENT_TIMESTAMP
         WHERE requestEmail = $1 AND receiveEmail = $2
       `;
   
