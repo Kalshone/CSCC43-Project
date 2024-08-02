@@ -72,6 +72,10 @@
           <td>Coefficient of Variation (Volatility)</td>
           <td id="cov-value"></td>
         </tr>
+        <tr>
+          <td>Beta Coefficient</td>
+          <td id="beta-value"></td>
+        </tr>
       </tbody>
     </table>
   </div>
@@ -163,7 +167,7 @@
                 stockTableBody.appendChild(row);
               });
 
-              const timestamps = data.map(stock => new Date(stock.timestamp).toISOString().split('T')[0]);
+              const timestamps = data.map(stock => new Date(stock.timestamp));
               const closePrices = data.map(stock => stock.close);
 
               const ctx = document.getElementById('stock-chart').getContext('2d');
@@ -201,10 +205,11 @@
               fetch(`/api/stock-stats/${stockCode}`)
                 .then(response => response.json())
                 .then(stats => {
-                  document.getElementById('avg-return-value').textContent = (stats.averageReturn * 100).toFixed(2) + '%';
-                  document.getElementById('variance-value').textContent = stats.variance.toFixed(2);
-                  document.getElementById('stddev-value').textContent = stats.stddev.toFixed(2);
-                  document.getElementById('cov-value').textContent = stats.cov.toFixed(2);
+                  document.getElementById('avg-return-value').textContent = stats.averageReturn;
+                  document.getElementById('variance-value').textContent = stats.variance;
+                  document.getElementById('stddev-value').textContent = stats.stddev;
+                  document.getElementById('cov-value').textContent = stats.cov;
+                  document.getElementById('beta-value').textContent = stats.beta;
                 })
                 .catch(error => console.error('Error fetching stock statistics:', error));
             } else {
@@ -277,22 +282,22 @@
                       stockTableBody.appendChild(row);
                     });
 
-                    const timestamps = data.map(stock => new Date(stock.timestamp).toISOString().split('T')[0]);
+                    const timestamps = data.map(stock => new Date(stock.timestamp));
                     const closePrices = data.map(stock => stock.close);
                     stockChart.data.labels = timestamps;
                     stockChart.data.datasets[0].data = closePrices;
                     stockChart.update();
 
                     fetch(`/api/stock-stats/${stockCode}`)
-                    .then(response => response.json())
-                    .then(stats => {
-                    document.getElementById('avg-return-value').textContent = isNaN(stats.averageReturn) ? 'N/A' : (stats.averageReturn * 100).toFixed(2) + '%';
-                    document.getElementById('variance-value').textContent = isNaN(stats.variance) ? 'N/A' : stats.variance.toFixed(2);
-                    document.getElementById('stddev-value').textContent = isNaN(stats.stddev) ? 'N/A' : stats.stddev.toFixed(2);
-                    document.getElementById('cov-value').textContent = isNaN(stats.cov) ? 'N/A' : stats.cov.toFixed(2);
-                    })
-                    .catch(error => console.error('Error fetching stock statistics:', error));
-
+                      .then(response => response.json())
+                      .then(stats => {
+                        document.getElementById('avg-return-value').textContent = stats.averageReturn;
+                        document.getElementById('variance-value').textContent = stats.variance;
+                        document.getElementById('stddev-value').textContent = stats.stddev;
+                        document.getElementById('cov-value').textContent = stats.cov;
+                        document.getElementById('beta-value').textContent = stats.beta;
+                      })
+                      .catch(error => console.error('Error fetching stock statistics:', error));
                   })
                   .catch(error => console.error('Error fetching stock detail:', error));
               } else {

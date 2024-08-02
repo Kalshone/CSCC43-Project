@@ -73,6 +73,10 @@
           <td>Coefficient of Variation (Volatility)</td>
           <td id="cov-value"></td>
         </tr>
+        <tr>
+          <td>Beta (Market Risk)</td>
+          <td id="beta-value"></td>
+        </tr>
       </tbody>
     </table>
   </div>
@@ -189,6 +193,7 @@
                                 document.getElementById('variance-value').textContent = stats.variance.toFixed(2);
                                 document.getElementById('stddev-value').textContent = stats.stddev.toFixed(2);
                                 document.getElementById('cov-value').textContent = stats.cov.toFixed(2);
+                                document.getElementById('beta-value').textContent = stats.beta.toFixed(2);
                               })
                               .catch(error => console.error('Error fetching portfolio statistics:', error));
                           } else {
@@ -216,6 +221,7 @@
                         document.getElementById('variance-value').textContent = stats.variance.toFixed(2);
                         document.getElementById('stddev-value').textContent = stats.stddev.toFixed(2);
                         document.getElementById('cov-value').textContent = stats.cov.toFixed(2);
+                        document.getElementById('beta-value').textContent = stats.beta.toFixed(2);
                       })
                       .catch(error => console.error('Error fetching portfolio statistics:', error));
                   })
@@ -259,6 +265,7 @@
                 document.getElementById('variance-value').textContent = isNaN(stats.variance) ? 'N/A' : stats.variance.toFixed(2);
                 document.getElementById('stddev-value').textContent = isNaN(stats.stddev) ? 'N/A' : stats.stddev.toFixed(2);
                 document.getElementById('cov-value').textContent = isNaN(stats.cov) ? 'N/A' : stats.cov.toFixed(2);
+                document.getElementById('beta-value').textContent = isNaN(stats.beta) ? 'N/A' : stats.beta.toFixed(2);
               })
               .catch(error => console.error('Error fetching portfolio statistics:', error));
           })
