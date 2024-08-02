@@ -217,6 +217,40 @@ app.put('/api/portfolio/:id/add-cash', (req, res) => {
   });
 });
 
+// withdraw cash
+app.put('/api/portfolio/:id/withdraw-cash', (req, res) => {
+  const portfolioId = parseInt(req.params.id, 10);
+  const { amount } = req.body;
+  if (isNaN(portfolioId) || isNaN(amount) || amount <= 0) {
+    return res.status(400).send('Invalid portfolio ID or amount');
+  }
+  const fetchQuery = 'SELECT cashbalance FROM Portfolios WHERE portfolioid = $1';
+  client.query(fetchQuery, [portfolioId], (fetchErr, fetchResult) => {
+    if (fetchErr) {
+      console.error('Error fetching portfolio:', fetchErr);
+      return res.status(500).send('Error fetching portfolio');
+    }
+
+    if (fetchResult.rows.length === 0) {
+      return res.status(404).send('Portfolio not found');
+    }
+    const currentCashBalance = parseFloat(fetchResult.rows[0].cashbalance);
+    if (amount > currentCashBalance) {
+      return res.status(400).send('Insufficient funds');
+    }
+    const newCashBalance = currentCashBalance - parseFloat(amount);
+    const updateQuery = 'UPDATE Portfolios SET cashbalance = $1 WHERE portfolioid = $2 RETURNING cashbalance';
+    client.query(updateQuery, [newCashBalance, portfolioId], (updateErr, updateResult) => {
+      if (updateErr) {
+        console.error('Error updating cash balance:', updateErr);
+        return res.status(500).send('Error updating cash balance');
+      }
+      res.json({ newCashBalance: updateResult.rows[0].cashbalance });
+    });
+  });
+});
+
+
 // buy stock
 app.post('/api/buy-stock', (req, res) => {
   const { stockSymbol, numShares, portfolioId } = req.body;
