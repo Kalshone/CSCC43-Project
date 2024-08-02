@@ -13,15 +13,44 @@
     .stocklist-details {
       margin-top: 20px;
     }
+    .stock-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    .stock-table th, .stock-table td {
+      border: 1px solid #ccc;
+      padding: 10px;
+      text-align: left;
+    }
+    .stock-table th {
+      background-color: #f4f4f4;
+    }
   </style>
 </head>
 <body>
   <h1 id="stocklist-name">Stocklist Page</h1>
   <div class="stocklist-details">
-    <p><strong>ID:</strong> <span id="stocklist-id"></span></p>
     <p><strong>Name:</strong> <span id="stocklist-name-detail"></span></p>
-    <p><strong>Is Public:</strong> <span id="is-public"></span></p>
+    <p><strong>Visibility:</strong></p>
+    <input type="radio" id="public" name="visibility" value="Public" disabled>
+    <label for="public">Public</label>
+    <input type="radio" id="private" name="visibility" value="Private" disabled>
+    <label for="private">Private</label>
+    <p><strong>Total Stocklist Value:</strong> <span id="stocklist-value"></span></p>
   </div>
+  <table class="stock-table" id="stock-table">
+    <thead>
+      <tr>
+        <th>Stock Symbol</th>
+        <th>Number of Shares</th>
+        <th>Most Recent Close Price (per share)</th>
+      </tr>
+    </thead>
+    <tbody>
+    </tbody>
+  </table>
+
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const urlParams = new URLSearchParams(window.location.search);
@@ -38,9 +67,75 @@
           .then(data => {
             if (data) {
               document.getElementById('stocklist-name').textContent = data.name || 'Unnamed Stocklist';
-              document.getElementById('stocklist-id').textContent = data.stocklistid || 'N/A';
               document.getElementById('stocklist-name-detail').textContent = data.name || 'N/A';
-              document.getElementById('is-public').textContent = data.ispublic ? 'Yes' : 'No';
+              if (data.ispublic) {
+                document.getElementById('public').checked = true;
+              } else {
+                document.getElementById('private').checked = true;
+              }
+              fetch('/api/session')
+                .then(response => response.json())
+                .then(sessionData => {
+                  if (sessionData.user.email === data.owner) {
+                    document.getElementById('public').disabled = false;
+                    document.getElementById('private').disabled = false;
+                    document.querySelectorAll('input[name="visibility"]').forEach(radio => {
+                      radio.addEventListener('change', function() {
+                        const selectedVisibility = this.value === 'Public';
+                        fetch(`/api/stocklist/${stocklistId}/visibility`, {
+                          method: 'PUT',
+                          headers: {
+                            'Content-Type': 'application/json'
+                          },
+                          body: JSON.stringify({ isPublic: selectedVisibility })
+                        })
+                        .then(response => {
+                          if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                          }
+                          return response.json();
+                        })
+                        .then(updateData => {
+                          console.log('Visibility updated successfully:', updateData);
+                        })
+                        .catch(error => console.error('Error updating visibility:', error));
+                      });
+                    });
+                  }
+                })
+                .catch(error => console.error('Error fetching session data:', error));
+              fetch(`/api/stocklist/${stocklistId}/stocks`)
+                .then(response => {
+                  if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                  }
+                  return response.json();
+                })
+                .then(stockData => {
+                  const stockTableBody = document.getElementById('stock-table').querySelector('tbody');
+                  let totalValue = 0;
+
+                  stockData.forEach(stock => {
+                    const row = document.createElement('tr');
+                    const stockSymbolCell = document.createElement('td');
+                    stockSymbolCell.textContent = stock.stocksymbol;
+                    const numSharesCell = document.createElement('td');
+                    numSharesCell.textContent = stock.numshares;
+                    const closePriceCell = document.createElement('td');
+                    closePriceCell.textContent = stock.close || 'N/A';
+
+                    const stockValue = stock.numshares * stock.close;
+                    totalValue += stockValue;
+
+                    row.appendChild(stockSymbolCell);
+                    row.appendChild(numSharesCell);
+                    row.appendChild(closePriceCell);
+                    stockTableBody.appendChild(row);
+                  });
+
+                  document.getElementById('stocklist-value').textContent = totalValue.toFixed(2);
+                })
+                .catch(error => console.error('Error fetching stock data:', error));
             } else {
               console.error('No data returned for stocklist details.');
             }

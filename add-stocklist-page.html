@@ -8,7 +8,15 @@
   <form action="/add-stocklist" method="post">
     <label for="stocklistName">Stocklist Name:</label>
     <input type="text" id="stocklistName" name="stocklistName" required>
+    <br><br>
+    <label>Stocklist Visibility:</label>
     <br>
+    <input type="radio" id="public" name="stocklistVisibility" value="Public" required>
+    <label for="public">Public</label>
+    <br>
+    <input type="radio" id="private" name="stocklistVisibility" value="Private" required>
+    <label for="private">Private</label>
+    <br><br>
     <button type="submit">Create Stocklist</button>
   </form>
 </body>
