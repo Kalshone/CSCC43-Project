@@ -217,6 +217,40 @@ app.put('/api/portfolio/:id/add-cash', (req, res) => {
   });
 });
 
+// withdraw cash
+app.put('/api/portfolio/:id/withdraw-cash', (req, res) => {
+  const portfolioId = parseInt(req.params.id, 10);
+  const { amount } = req.body;
+  if (isNaN(portfolioId) || isNaN(amount) || amount <= 0) {
+    return res.status(400).send('Invalid portfolio ID or amount');
+  }
+  const fetchQuery = 'SELECT cashbalance FROM Portfolios WHERE portfolioid = $1';
+  client.query(fetchQuery, [portfolioId], (fetchErr, fetchResult) => {
+    if (fetchErr) {
+      console.error('Error fetching portfolio:', fetchErr);
+      return res.status(500).send('Error fetching portfolio');
+    }
+
+    if (fetchResult.rows.length === 0) {
+      return res.status(404).send('Portfolio not found');
+    }
+    const currentCashBalance = parseFloat(fetchResult.rows[0].cashbalance);
+    if (amount > currentCashBalance) {
+      return res.status(400).send('Insufficient funds');
+    }
+    const newCashBalance = currentCashBalance - parseFloat(amount);
+    const updateQuery = 'UPDATE Portfolios SET cashbalance = $1 WHERE portfolioid = $2 RETURNING cashbalance';
+    client.query(updateQuery, [newCashBalance, portfolioId], (updateErr, updateResult) => {
+      if (updateErr) {
+        console.error('Error updating cash balance:', updateErr);
+        return res.status(500).send('Error updating cash balance');
+      }
+      res.json({ newCashBalance: updateResult.rows[0].cashbalance });
+    });
+  });
+});
+
+
 // buy stock
 app.post('/api/buy-stock', (req, res) => {
   const { stockSymbol, numShares, portfolioId } = req.body;
@@ -629,6 +663,41 @@ app.get('/api/stocks', (req, res) => {
     }
   });
 });
+
+// fetch stock detail by code
+app.get('/api/stock-detail/:code', (req, res) => {
+  const stockCode = req.params.code;
+
+  const query = 'SELECT * FROM stockdata WHERE code = $1 ORDER BY timestamp DESC';
+  client.query(query, [stockCode], (err, result) => {
+    if (err) {
+      console.error('Error fetching stock detail:', err);
+      res.status(500).send('Error fetching stock detail');
+    } else {
+      res.json(result.rows);
+    }
+  });
+});
+
+// add stock data
+app.post('/api/add-stock-data', (req, res) => {
+  const { code, timestamp, open, high, low, close, volume } = req.body;
+
+  const query = `
+    INSERT INTO stockdata (code, timestamp, open, high, low, close, volume)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+  `;
+
+  client.query(query, [code, timestamp, open, high, low, close, volume], (err, result) => {
+    if (err) {
+      console.error('Error adding stock data:', err);
+      res.status(500).json({ success: false, message: 'Error adding stock data' });
+    } else {
+      res.json({ success: true });
+    }
+  });
+});
+
 
 
   app.get("/friends", (req, res) => {

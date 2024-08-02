@@ -51,7 +51,10 @@
             stockItem.classList.add('stock-item');
 
             const stockCode = document.createElement('div');
-            stockCode.textContent = stock.code;
+            const stockLink = document.createElement('a');
+            stockLink.href = `/stock-detail.html?code=${stock.code}`;
+            stockLink.textContent = stock.code;
+            stockCode.appendChild(stockLink);
 
             const stockPrice = document.createElement('div');
             stockPrice.textContent = `Price: ${stock.close}`;
