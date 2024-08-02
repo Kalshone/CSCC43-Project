@@ -43,6 +43,7 @@
         })
         .then(([stocks, portfolios, stocklists]) => {
           const stockList = document.getElementById('stock-list');
+          const portfolioStocklistIds = portfolios.map(portfolio => portfolio.stocklistid);
 
           stocks.forEach(stock => {
             const stockItem = document.createElement('div');
@@ -77,7 +78,8 @@
             addOption.disabled = true;
             addOption.selected = true;
             addToStocklistSelect.appendChild(addOption);
-            stocklists.forEach(stocklist => {
+            const filteredStocklists = stocklists.filter(stocklist => !portfolioStocklistIds.includes(stocklist.stocklistid));
+            filteredStocklists.forEach(stocklist => {
               const option = document.createElement('option');
               option.value = stocklist.stocklistid;
               option.textContent = stocklist.name;

@@ -10,8 +10,21 @@
     h1 {
       text-align: center;
     }
-    .portfolio-details {
+    .portfolio-details, .stocklist-details {
       margin-top: 20px;
+    }
+    .stock-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    .stock-table th, .stock-table td {
+      border: 1px solid #ccc;
+      padding: 10px;
+      text-align: left;
+    }
+    .stock-table th {
+      background-color: #f4f4f4;
     }
     .add-cash {
       margin-top: 20px;
@@ -31,6 +44,20 @@
     <h3>Add Cash to Portfolio</h3>
     <input type="number" id="cash-amount" placeholder="Enter amount">
     <button id="add-cash-button">Add</button>
+  </div>
+
+  <div class="stocklist-details">
+    <h3>Stocks in this Stocklist</h3>
+    <table class="stock-table" id="stock-table">
+      <thead>
+        <tr>
+          <th>Stock Symbol</th>
+          <th>Number of Shares</th>
+          <th>Most Recent Close Price</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
   </div>
 
   <script>
@@ -53,6 +80,33 @@
               document.getElementById('portfolio-name-detail').textContent = data.name || 'N/A';
               document.getElementById('stock-list-id').textContent = data.stocklistid || 'N/A';
               document.getElementById('cash-balance').textContent = data.cashbalance || 'N/A';
+
+              if (data.stocklistid) {
+                fetch(`/api/stocklist/${data.stocklistid}/stocks`)
+                  .then(response => {
+                    if (!response.ok) {
+                      throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                  })
+                  .then(stockData => {
+                    const stockTableBody = document.getElementById('stock-table').querySelector('tbody');
+                    stockData.forEach(stock => {
+                      const row = document.createElement('tr');
+                      const stockSymbolCell = document.createElement('td');
+                      stockSymbolCell.textContent = stock.stocksymbol;
+                      const numSharesCell = document.createElement('td');
+                      numSharesCell.textContent = stock.numshares;
+                      const closePriceCell = document.createElement('td');
+                      closePriceCell.textContent = stock.close || 'N/A';
+                      row.appendChild(stockSymbolCell);
+                      row.appendChild(numSharesCell);
+                      row.appendChild(closePriceCell);
+                      stockTableBody.appendChild(row);
+                    });
+                  })
+                  .catch(error => console.error('Error fetching stock data:', error));
+              }
             } else {
               console.error('No data returned for portfolio details.');
             }

@@ -119,44 +119,52 @@ client.connect((err) => {
   });
 
   // add portfolio process
-  app.post('/add-portfolio', (req, res) => {
+app.post('/add-portfolio', (req, res) => {
+  if (req.session.user) {
+    const email = req.session.user.email;
+    const portfolioName = req.body.portfolioName;
+    const cashbalance = 0;
+    const createStocklistQuery = 'INSERT INTO Stocklists (email, name, isPublic) VALUES ($1, $2, $3) RETURNING stocklistid';
+    client.query(createStocklistQuery, [email, portfolioName, false], (err, result) => {
+      if (err) {
+        console.error('Error creating stocklist:', err);
+        return res.status(500).send('Error creating stocklist');
+      }
+
+      const stocklistId = result.rows[0].stocklistid;
+      const createPortfolioQuery = 'INSERT INTO Portfolios (email, stockListId, name, cashbalance) VALUES ($1, $2, $3, $4) RETURNING portfolioid';
+      client.query(createPortfolioQuery, [email, stocklistId, portfolioName, cashbalance], (err, result) => {
+        if (err) {
+          console.error('Error creating portfolio:', err);
+          return res.status(500).send('Error creating portfolio');
+        }
+
+        const newPortfolio = result.rows[0];
+        res.redirect(`/portfolio-page?id=${newPortfolio.portfolioid}`);
+      });
+    });
+  } else {
+    res.redirect('/');
+  }
+});
+
+  // fetch portfolios for user
+  app.get('/api/portfolios', (req, res) => {
     if (req.session.user) {
       const email = req.session.user.email;
-      const stockListId = null;
-      const name = req.body.portfolioName;
-      const cashbalance = 0;
-      const query = 'INSERT INTO PORTFOLIOS (email, stockListId, name, cashbalance) VALUES ($1, $2, $3, $4) RETURNING portfolioid';
-      client.query(query, [email, stockListId, name, cashbalance], (err, result) => {
+      const query = 'SELECT * FROM Portfolios WHERE email = $1';
+      client.query(query, [email], (err, result) => {
         if (err) {
           console.error('Error executing query', err);
-          res.status(500).send('Error adding portfolio');
+          res.status(500).send('Error fetching portfolios');
         } else {
-          const newPortfolio = result.rows[0];
-          res.redirect(`/portfolio-page?id=${newPortfolio.portfolioid}`);
+          res.json(result.rows);
         }
       });
     } else {
-      res.redirect('/');
+      res.status(401).send('Unauthorized');
     }
   });
-
-  // fetch portfolios for user
-app.get('/api/portfolios', (req, res) => {
-  if (req.session.user) {
-    const email = req.session.user.email;
-    const query = 'SELECT * FROM Portfolios WHERE email = $1';
-    client.query(query, [email], (err, result) => {
-      if (err) {
-        console.error('Error executing query', err);
-        res.status(500).send('Error fetching portfolios');
-      } else {
-        res.json(result.rows);
-      }
-    });
-  } else {
-    res.status(401).send('Unauthorized');
-  }
-});
 
   // fetch portfolio details by id
   app.get('/api/portfolio/:id', (req, res) => {
