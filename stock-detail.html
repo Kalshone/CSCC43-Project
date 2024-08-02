@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Stock Detail</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+    }
+    .stock-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    .stock-table th, .stock-table td {
+      border: 1px solid #ccc;
+      padding: 10px;
+      text-align: left;
+    }
+    .stock-table th {
+      background-color: #f4f4f4;
+    }
+  </style>
+</head>
+<body>
+  <h1 id="stock-code"></h1>
+  <table class="stock-table" id="stock-table">
+    <thead>
+      <tr>
+        <th>Timestamp</th>
+        <th>Open</th>
+        <th>High</th>
+        <th>Low</th>
+        <th>Close</th>
+        <th>Volume</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const stockCode = urlParams.get('code');
+
+      if (stockCode) {
+        document.getElementById('stock-code').textContent = stockCode;
+        fetch(`/api/stock-detail/${stockCode}`)
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            return response.json();
+          })
+          .then(data => {
+            const stockTableBody = document.getElementById('stock-table').querySelector('tbody');
+            data.forEach(stock => {
+              const row = document.createElement('tr');
+              const timestampCell = document.createElement('td');
+              timestampCell.textContent = stock.timestamp;
+              const openCell = document.createElement('td');
+              openCell.textContent = stock.open;
+              const highCell = document.createElement('td');
+              highCell.textContent = stock.high;
+              const lowCell = document.createElement('td');
+              lowCell.textContent = stock.low;
+              const closeCell = document.createElement('td');
+              closeCell.textContent = stock.close;
+              const volumeCell = document.createElement('td');
+              volumeCell.textContent = stock.volume;
+              row.appendChild(timestampCell);
+              row.appendChild(openCell);
+              row.appendChild(highCell);
+              row.appendChild(lowCell);
+              row.appendChild(closeCell);
+              row.appendChild(volumeCell);
+              stockTableBody.appendChild(row);
+            });
+          })
+          .catch(error => console.error('Error fetching stock detail:', error));
+      } else {
+        console.error('No stock code found in the URL.');
+      }
+    });
+  </script>
+</body>
+</html>

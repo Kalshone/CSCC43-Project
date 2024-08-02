@@ -664,6 +664,22 @@ app.get('/api/stocks', (req, res) => {
   });
 });
 
+// fetch stock detail by code
+app.get('/api/stock-detail/:code', (req, res) => {
+  const stockCode = req.params.code;
+
+  const query = 'SELECT * FROM stockdata WHERE code = $1 ORDER BY timestamp DESC';
+  client.query(query, [stockCode], (err, result) => {
+    if (err) {
+      console.error('Error fetching stock detail:', err);
+      res.status(500).send('Error fetching stock detail');
+    } else {
+      res.json(result.rows);
+    }
+  });
+});
+
+
 
   app.get("/friends", (req, res) => {
     if (req.session.user) {
