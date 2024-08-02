@@ -111,9 +111,16 @@
                     sharesInput.value = '';
                   } else {
                     alert(`Error buying stock: ${data.message}`);
+                    buySelect.selectedIndex = 0;
+                    sharesInput.value = '';
                   }
                 })
-                .catch(error => console.error('Error:', error));
+                .catch(error => {
+                  console.error('Error:', error);
+                  alert('Error buying stock');
+                  buySelect.selectedIndex = 0;
+                  sharesInput.value = '';
+                });
               } else {
                 alert('Please enter a valid number of shares and select a portfolio');
               }
@@ -143,9 +150,16 @@
                     sharesInput.value = '';
                   } else {
                     alert('Error adding stock to stocklist');
+                    addToStocklistSelect.selectedIndex = 0;
+                    sharesInput.value = '';
                   }
                 })
-                .catch(error => console.error('Error:', error));
+                .catch(error => {
+                  console.error('Error:', error);
+                  alert('Error adding stock to stocklist');
+                  addToStocklistSelect.selectedIndex = 0;
+                  sharesInput.value = '';
+                });
               } else {
                 alert('Please enter a valid number of shares and select a stocklist');
               }
