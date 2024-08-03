@@ -287,11 +287,11 @@
         fetch(`/api/portfolio-stats/${portfolioId}`)
           .then(response => response.json())
           .then(data => {
-            document.getElementById('avg-return-value').textContent = data.averageReturn.toFixed(4);
-            document.getElementById('variance-value').textContent = data.variance.toFixed(4);
-            document.getElementById('stddev-value').textContent = data.stddev.toFixed(4);
-            document.getElementById('cov-value').textContent = data.cov.toFixed(4);
-            document.getElementById('beta-value').textContent = data.beta.toFixed(4);
+            document.getElementById('avg-return-value').textContent = data.averageReturn;
+            document.getElementById('variance-value').textContent = data.variance;
+            document.getElementById('stddev-value').textContent = data.stddev;
+            document.getElementById('cov-value').textContent = data.cov;
+            document.getElementById('beta-value').textContent = data.beta;
           })
           .catch(error => console.error('Error fetching portfolio statistics:', error));
       }
@@ -321,7 +321,7 @@
 
               symbols.forEach(symbol2 => {
                 const cell = document.createElement('td');
-                cell.textContent = data[symbol1][symbol2].toFixed(4);
+                cell.textContent = data[symbol1][symbol2];
                 row.appendChild(cell);
               });
 
