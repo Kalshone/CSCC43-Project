@@ -95,9 +95,9 @@
 
         requestReviewButton.addEventListener('click', () => {
           const userEmail = reviewRequestInput.value.trim();
-          const stockListId = 1; // Replace with the appropriate stock list ID
+          const stocklistid = 1; // Replace with the appropriate stock list ID
           if (userEmail) {
-            requestReview(userEmail, stockListId);
+            requestReview(userEmail, stocklistid);
             reviewRequestInput.value = '';
           }
         });

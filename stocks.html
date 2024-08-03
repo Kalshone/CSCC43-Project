@@ -74,7 +74,7 @@
     })
     .then(([stocks, portfolios, stocklists]) => {
       const stockList = document.getElementById('stock-list');
-      const portfolioStocklistIds = portfolios.map(portfolio => portfolio.stocklistid);
+      const portfoliostocklistids = portfolios.map(portfolio => portfolio.stocklistid);
 
       stocks.forEach(stock => {
         const stockItem = document.createElement('div');
@@ -112,7 +112,7 @@
         addOption.disabled = true;
         addOption.selected = true;
         addToStocklistSelect.appendChild(addOption);
-        const filteredStocklists = stocklists.filter(stocklist => !portfolioStocklistIds.includes(stocklist.stocklistid));  
+        const filteredStocklists = stocklists.filter(stocklist => !portfoliostocklistids.includes(stocklist.stocklistid));  
         filteredStocklists.forEach(stocklist => {
           const option = document.createElement('option');
           option.value = stocklist.stocklistid;
@@ -160,10 +160,10 @@
         });
 
         addToStocklistSelect.addEventListener('change', () => {
-          const stocklistId = addToStocklistSelect.value;
+          const stocklistid = addToStocklistSelect.value;
           const numShares = sharesInput.value;
 
-          if (numShares > 0 && stocklistId) {
+          if (numShares > 0 && stocklistid) {
             fetch('/api/add-to-stocklist', {
               method: 'POST',
               headers: {
@@ -172,7 +172,7 @@
               body: JSON.stringify({
                 stockSymbol: stock.code,
                 numShares: numShares,
-                stocklistId: stocklistId
+                stocklistid: stocklistid
               })
             })
             .then(response => response.json())

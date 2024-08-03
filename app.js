@@ -1,6 +1,7 @@
 const express = require("express");
 const session = require("express-session");
 const { Client } = require("pg");
+const { SimpleLinearRegression } = require('ml-regression');
 const app = express();
 const port = 3000;
 const path = require('path');
@@ -1620,6 +1621,238 @@ app.get('/api/portfolio/:id/covariance-matrix', async (req, res) => {
       res.status(401).send('Unauthorized');
     }
   });
+  
+  // stock predictions
+  app.get('/api/predictions/:code', async (req, res) => {
+    const stockCode = req.params.code;
+  
+    const query = 'SELECT timestamp, close FROM stockdata WHERE code = $1 ORDER BY timestamp ASC';
+    try {
+      const result = await client.query(query, [stockCode]);
+      if (result.rows.length === 0) {
+        return res.status(404).send('No stock data found for the given code');
+      }
+  
+      const data = result.rows;
+      const timestamps = data.map(row => new Date(row.timestamp).getTime());
+      const closePrices = data.map(row => parseFloat(row.close));
+  
+      const regression = new SimpleLinearRegression(timestamps, closePrices);
+  
+      const lastDate = new Date(timestamps[timestamps.length - 1]);
+      const predictions = [];
+      for (let i = 1; i <= 60; i++) { // 5 years of monthly predictions
+        const futureDate = new Date(lastDate.getFullYear(), lastDate.getMonth() + i, 1);
+        const futureTimestamp = futureDate.getTime();
+        const predictedClose = regression.predict(futureTimestamp);
+        predictions.push({
+          date: futureDate.toISOString().split('T')[0],
+          predictedClose: predictedClose
+        });
+      }
+  
+      res.json(predictions);
+    } catch (err) {
+      console.error('Error fetching stock data:', err);
+      res.status(500).send('Error fetching stock data');
+    }
+  });
+
+  // Fetch historical stock data
+app.get('/api/stock-history/:symbol', async (req, res) => {
+  const stockSymbol = req.params.symbol;
+
+  const query = 'SELECT * FROM stockdata WHERE code = $1 ORDER BY timestamp ASC';
+  try {
+    const result = await client.query(query, [stockSymbol]);
+    if (result.rows.length === 0) {
+      return res.status(404).send('No stock data found for the given symbol');
+    }
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching stock history:', err);
+    res.status(500).send('Error fetching stock history');
+  }
+});
+
+// Fetch historical portfolio values
+app.get('/api/portfolio-history/:id', async (req, res) => {
+  const portfolioId = parseInt(req.params.id, 10);
+
+  if (isNaN(portfolioId)) {
+    return res.status(400).send('Invalid portfolio ID');
+  }
+
+  const portfolioQuery = `
+    SELECT sh.stocksymbol, sh.numshares
+    FROM Stocklistholdings slh
+    JOIN Stockholdings sh ON slh.stockholdingid = sh.stockholdingid
+    WHERE slh.stocklistid = (
+      SELECT stocklistid FROM Portfolios WHERE portfolioid = $1
+    );
+  `;
+  
+  const stockHistoryQuery = `
+    SELECT code, timestamp, close
+    FROM stockdata
+    WHERE code = ANY($1::text[])
+    ORDER BY timestamp ASC;
+  `;
+
+  try {
+    const portfolioResult = await client.query(portfolioQuery, [portfolioId]);
+    const stocks = portfolioResult.rows;
+    if (stocks.length === 0) {
+      return res.status(404).send('Portfolio not found or empty');
+    }
+
+    const stockSymbols = stocks.map(stock => stock.stocksymbol);
+    const stockHistoryResult = await client.query(stockHistoryQuery, [stockSymbols]);
+
+    const stockHistory = stockHistoryResult.rows;
+
+    const portfolioValues = calculatePortfolioHistory(stocks, stockHistory);
+
+    res.json(portfolioValues);
+  } catch (err) {
+    console.error('Error fetching portfolio history:', err);
+    res.status(500).send('Error fetching portfolio history');
+  }
+});
+
+function calculatePortfolioHistory(stocks, stockHistory) {
+  const groupedData = stockHistory.reduce((acc, item) => {
+    const date = new Date(item.timestamp);
+    const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    if (!acc[month]) {
+      acc[month] = {};
+    }
+    if (!acc[month][item.code]) {
+      acc[month][item.code] = 0;
+    }
+    acc[month][item.code] = item.close;
+    return acc;
+  }, {});
+
+  const portfolioValues = Object.keys(groupedData).map(month => {
+    const monthData = groupedData[month];
+    const totalValue = stocks.reduce((acc, stock) => {
+      const stockValue = monthData[stock.stocksymbol] * stock.numshares || 0;
+      return acc + stockValue;
+    }, 0);
+    return { month, totalValue: totalValue.toFixed(2) };
+  });
+
+  return portfolioValues;
+}
+
+// fetch portfolio prediction
+app.get('/api/predicted-portfolio/:id', async (req, res) => {
+  const portfolioId = parseInt(req.params.id, 10);
+
+  try {
+    const portfolioResult = await client.query(`
+      SELECT sh.stocksymbol, sh.numshares, sd.timestamp, sd.close
+      FROM Stocklistholdings slh
+      JOIN Stockholdings sh ON slh.stockholdingid = sh.stockholdingid
+      JOIN stockdata sd ON sd.code = sh.stocksymbol
+      WHERE slh.stocklistid = (
+        SELECT stocklistid FROM Portfolios WHERE portfolioid = $1
+      )
+      ORDER BY sd.timestamp ASC
+    `, [portfolioId]);
+
+    const stocks = portfolioResult.rows;
+    if (stocks.length === 0) {
+      return res.status(404).send('Portfolio not found or empty');
+    }
+
+    const portfolioValues = {};
+    stocks.forEach(stock => {
+      const date = new Date(stock.timestamp).toISOString().split('T')[0];
+      if (!portfolioValues[date]) {
+        portfolioValues[date] = 0;
+      }
+      portfolioValues[date] += stock.numshares * stock.close;
+    });
+
+    const timestamps = Object.keys(portfolioValues).map(date => new Date(date).getTime());
+    const values = Object.values(portfolioValues);
+
+    const regression = new SimpleLinearRegression(timestamps, values);
+
+    const lastDate = new Date(timestamps[timestamps.length - 1]);
+    const predictions = [];
+    for (let i = 1; i <= 60; i++) { // 5 years of monthly predictions
+      const futureDate = new Date(lastDate.getFullYear(), lastDate.getMonth() + i, 1);
+      const futureTimestamp = futureDate.getTime();
+      const predictedValue = regression.predict(futureTimestamp);
+      predictions.push({
+        date: futureDate.toISOString().split('T')[0],
+        predictedValue: predictedValue
+      });
+    }
+
+    res.json(predictions);
+  } catch (err) {
+    console.error('Error fetching portfolio data:', err);
+    res.status(500).send('Error fetching portfolio data');
+  }
+});
+
+// stocklist prediction
+app.get('/api/predicted-stocklist/:id', async (req, res) => {
+  const stocklistid = parseInt(req.params.id, 10);
+
+  try {
+    const stocklistResult = await client.query(`
+      SELECT sh.stocksymbol, sh.numshares, sd.timestamp, sd.close
+      FROM Stocklistholdings slh
+      JOIN Stockholdings sh ON slh.stockholdingid = sh.stockholdingid
+      JOIN stockdata sd ON sd.code = sh.stocksymbol
+      WHERE slh.stocklistid = $1
+      ORDER BY sd.timestamp ASC
+    `, [stocklistid]);
+
+    const stocks = stocklistResult.rows;
+    if (stocks.length === 0) {
+      return res.status(404).send('Stocklist not found or empty');
+    }
+
+    const stocklistValues = {};
+    stocks.forEach(stock => {
+      const date = new Date(stock.timestamp).toISOString().split('T')[0];
+      if (!stocklistValues[date]) {
+        stocklistValues[date] = 0;
+      }
+      stocklistValues[date] += stock.numshares * stock.close;
+    });
+
+    const timestamps = Object.keys(stocklistValues).map(date => new Date(date).getTime());
+    const values = Object.values(stocklistValues);
+
+    const regression = new SimpleLinearRegression(timestamps, values);
+
+    const lastDate = new Date(timestamps[timestamps.length - 1]);
+    const predictions = [];
+    for (let i = 1; i <= 60; i++) { // 5 years of monthly predictions
+      const futureDate = new Date(lastDate.getFullYear(), lastDate.getMonth() + i, 1);
+      const futureTimestamp = futureDate.getTime();
+      const predictedValue = regression.predict(futureTimestamp);
+      predictions.push({
+        date: futureDate.toISOString().split('T')[0],
+        predictedValue: predictedValue
+      });
+    }
+
+    res.json(predictions);
+  } catch (err) {
+    console.error('Error fetching stocklist data:', err);
+    res.status(500).send('Error fetching stocklist data');
+  }
+});
+
+
 
   app.listen(port, () => {
     console.log(`Server is running on port ${port}`);

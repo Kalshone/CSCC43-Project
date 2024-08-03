@@ -13,23 +13,25 @@
     .stocklist-details {
       margin-top: 20px;
     }
-    .stock-table {
+    .stock-table, .performance-table, .prediction-table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 20px;
     }
-    .stock-table th, .stock-table td {
+    .stock-table th, .stock-table td, .performance-table th, .performance-table td, .prediction-table th, .prediction-table td {
       border: 1px solid #ccc;
       padding: 10px;
       text-align: left;
     }
-    .stock-table th {
+    .stock-table th, .performance-table th, .prediction-table th {
       background-color: #f4f4f4;
     }
     a {
       color: #4CAF50;
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 </head>
 <body>
   <h1 id="stocklist-name">Stocklist Page</h1>
@@ -81,12 +83,41 @@
     </form>
   </div>
 
+  <h2>Stocklist Performance Over Time</h2>
+  <canvas id="performance-chart"></canvas>
+
+  <h2>Stocklist Past Performance</h2>
+  <table class="performance-table">
+    <thead>
+      <tr>
+        <th>Month</th>
+        <th>Stocklist Value</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2>Predicted Stocklist Value Over the Next 5 Years</h2>
+  <canvas id="prediction-chart"></canvas>
+
+  <h2>Predicted Stocklist Value</h2>
+  <table class="prediction-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Predicted Value</th>
+      </tr>
+    </thead>
+    <tbody id="prediction-body"></tbody>
+  </table>
+
   <a href="/dashboard">Back to Dashboard</a>
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const urlParams = new URLSearchParams(window.location.search);
       const stocklistid = urlParams.get('id');
+      let performanceChart, predictionChart;
 
       fetchStocklistReviews(stocklistid);
 
@@ -240,6 +271,9 @@
                   });
 
                   document.getElementById('stocklist-value').textContent = totalValue.toFixed(2);
+
+                  fetchPerformanceData(stocklistid, stockData);
+                  fetchPredictionData(stocklistid);
                 })
                 .catch(error => console.error('Error fetching stock data:', error));
             } else {
@@ -279,6 +313,158 @@
         console.error('No stocklist ID found in the URL.');
       }
     });
+
+      function fetchPerformanceData(stocklistid, stockData) {
+        const performanceTableBody = document.querySelector('.performance-table tbody');
+        performanceTableBody.innerHTML = '';
+
+        const promises = stockData.map(stock => {
+          return fetch(`/api/stock-history/${stock.stocksymbol}`)
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Network response was not ok');
+              }
+              return response.json();
+            })
+            .then(data => {
+              const monthlyData = groupByMonth(data);
+              return { stock, monthlyData };
+            });
+        });
+
+        Promise.all(promises)
+          .then(results => {
+            const stocklistHistory = {};
+
+            results.forEach(({ stock, monthlyData }) => {
+              Object.keys(monthlyData).forEach(month => {
+                if (!stocklistHistory[month]) {
+                  stocklistHistory[month] = 0;
+                }
+                stocklistHistory[month] += stock.numshares * monthlyData[month].close;
+              });
+            });
+
+            const months = Object.keys(stocklistHistory).sort();
+            const stocklistValues = months.map(month => stocklistHistory[month]);
+
+            const ctx = document.getElementById('performance-chart').getContext('2d');
+            performanceChart = new Chart(ctx, {
+              type: 'line',
+              data: {
+                labels: months,
+                datasets: [{
+                  label: 'Stocklist Value',
+                  data: stocklistValues,
+                  borderColor: 'rgba(54, 162, 235, 1)',
+                  backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                  borderWidth: 1
+                }]
+              },
+              options: {
+                scales: {
+                  x: {
+                    type: 'time',
+                    time: {
+                      unit: 'month',
+                      tooltipFormat: 'MMM yyyy',
+                      displayFormats: {
+                        month: 'MMM yyyy'
+                      }
+                    }
+                  },
+                  y: {
+                    beginAtZero: false
+                  }
+                }
+              }
+            });
+
+            months.forEach(month => {
+              const row = document.createElement('tr');
+              const monthCell = document.createElement('td');
+              monthCell.textContent = month;
+              const valueCell = document.createElement('td');
+              valueCell.textContent = stocklistHistory[month].toFixed(2);
+              row.appendChild(monthCell);
+              row.appendChild(valueCell);
+              performanceTableBody.appendChild(row);
+            });
+          })
+          .catch(error => console.error('Error fetching performance data:', error));
+      }
+
+      function groupByMonth(data) {
+        return data.reduce((acc, item) => {
+          const date = new Date(item.timestamp);
+          const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          if (!acc[month]) {
+            acc[month] = item;
+          }
+          return acc;
+        }, {});
+      }
+
+      function fetchPredictionData(stocklistid) {
+        fetch(`/api/predicted-stocklist/${stocklistid}`)
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            return response.json();
+          })
+          .then(predictions => {
+            const predictionTableBody = document.getElementById('prediction-body');
+            predictionTableBody.innerHTML = '';
+
+            const dates = predictions.map(prediction => prediction.date);
+            const values = predictions.map(prediction => prediction.predictedValue);
+
+            const ctx = document.getElementById('prediction-chart').getContext('2d');
+            predictionChart = new Chart(ctx, {
+              type: 'line',
+              data: {
+                labels: dates,
+                datasets: [{
+                  label: 'Predicted Stocklist Value',
+                  data: values,
+                  borderColor: 'rgba(255, 99, 132, 1)',
+                  backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                  borderWidth: 1
+                }]
+              },
+              options: {
+                scales: {
+                  x: {
+                    type: 'time',
+                    time: {
+                      unit: 'month',
+                      tooltipFormat: 'MMM yyyy',
+                      displayFormats: {
+                        month: 'MMM yyyy'
+                      }
+                    }
+                  },
+                  y: {
+                    beginAtZero: false
+                  }
+                }
+              }
+            });
+
+            predictions.forEach(prediction => {
+              const row = document.createElement('tr');
+              const dateCell = document.createElement('td');
+              dateCell.textContent = prediction.date;
+              const valueCell = document.createElement('td');
+              valueCell.textContent = prediction.predictedValue.toFixed(2);
+              row.appendChild(dateCell);
+              row.appendChild(valueCell);
+              predictionTableBody.appendChild(row);
+            });
+          })
+          .catch(error => console.error('Error fetching prediction data:', error));
+      }
 
 
     function sendReviewRequest(email, stocklistid) {
