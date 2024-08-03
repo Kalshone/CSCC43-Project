@@ -1,6 +1,7 @@
 const express = require("express");
 const session = require("express-session");
 const { Client } = require("pg");
+const { SimpleLinearRegression } = require('ml-regression');
 const app = express();
 const port = 3000;
 const path = require('path');
@@ -1311,6 +1312,42 @@ app.get('/api/portfolio/:id/covariance-matrix', async (req, res) => {
       res.json({ user: req.session.user });
     } else {
       res.status(401).send('Unauthorized');
+    }
+  });
+  
+  // stock predictions
+  app.get('/api/predictions/:code', async (req, res) => {
+    const stockCode = req.params.code;
+  
+    const query = 'SELECT timestamp, close FROM stockdata WHERE code = $1 ORDER BY timestamp ASC';
+    try {
+      const result = await client.query(query, [stockCode]);
+      if (result.rows.length === 0) {
+        return res.status(404).send('No stock data found for the given code');
+      }
+  
+      const data = result.rows;
+      const timestamps = data.map(row => new Date(row.timestamp).getTime());
+      const closePrices = data.map(row => parseFloat(row.close));
+  
+      const regression = new SimpleLinearRegression(timestamps, closePrices);
+  
+      const lastDate = new Date(timestamps[timestamps.length - 1]);
+      const predictions = [];
+      for (let i = 1; i <= 60; i++) { // 5 years of monthly predictions
+        const futureDate = new Date(lastDate.getFullYear(), lastDate.getMonth() + i, 1);
+        const futureTimestamp = futureDate.getTime();
+        const predictedClose = regression.predict(futureTimestamp);
+        predictions.push({
+          date: futureDate.toISOString().split('T')[0],
+          predictedClose: predictedClose
+        });
+      }
+  
+      res.json(predictions);
+    } catch (err) {
+      console.error('Error fetching stock data:', err);
+      res.status(500).send('Error fetching stock data');
     }
   });
 
