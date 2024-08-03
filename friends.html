@@ -152,7 +152,6 @@
             alert(data.error);
             return;
           }
-          console.log('Friend request sent:', data);
           alert('Friend request sent successfully');
           fetchFriendsList(); // Reload friends list
           fetchPendingRequests();
@@ -204,7 +203,6 @@
         })
         .then(response => response.json())
         .then(data => {
-          console.log('Friend request accepted:', data);
           fetchPendingRequests();
           fetchFriendsList();
         })
@@ -221,7 +219,6 @@
         })
         .then(response => response.json())
         .then(data => {
-          console.log('Friend request declined:', data);
           fetchPendingRequests();
         })
         .catch(error => console.error('Error declining friend request:', error));
@@ -237,7 +234,6 @@
         })
         .then(response => response.json())
         .then(data => {
-          console.log('Friend deleted:', data);
           fetchFriendsList();
         })
         .catch(error => console.error('Error deleting friend:', error));

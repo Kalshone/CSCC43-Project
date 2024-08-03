@@ -191,9 +191,6 @@
                           }
                           return response.json();
                         })
-                        .then(updateData => {
-                          console.log('Visibility updated successfully:', updateData);
-                        })
                         .catch(error => console.error('Error updating visibility:', error));
                       });
                     });
@@ -261,7 +258,6 @@
           sendRequestButton.addEventListener('click', () => {
             const email = reviewRequestInput.value.trim();
             if (email) {
-              console.log('Sending review request to:', email);
               sendReviewRequest(email, stocklistid);
               reviewRequestInput.value = '';
             }
@@ -282,7 +278,6 @@
         })
         .then(response => response.json())
         .then(data => {
-          console.log('Review request sent:', data);
           alert('Review request sent successfully');
         })
         .catch(error => console.error('Error sending review request:', error));
@@ -309,11 +304,9 @@
                 if (review.reviewtext !== "") {
                   listItem.textContent = `Review from ${review.name}: "${review.reviewtext}"`;
                   reviewsList.appendChild(listItem);
-                  console.log("Review: " + review.reviewtext);
                 } else {
                   listItem.textContent = `Review from ${review.name}: Pending...`;
                   reviewsList.appendChild(listItem);
-                  console.log("Review: Pending...");
                 }
               });
             }

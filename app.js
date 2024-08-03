@@ -810,8 +810,6 @@ app.get('/api/public-stocklists', (req, res) => {
     if (req.session.user) {
       const email = req.session.user.email;
       const { stocklistid, reviewtext } = req.body;
-      console.log("stocklistid is", stocklistid);
-      console.log("reviewtext is", reviewtext);
   
       // First, check if there is a pending review
       const checkQuery = `
@@ -865,9 +863,7 @@ app.get('/api/public-stocklists', (req, res) => {
   
   app.post("/api/stocklist-reviews", (req, res) => {
     if (req.session.user) {
-      // const email = req.session.user.email;
       const { stocklistid } = req.body;
-      console.log("stocklistid is", stocklistid);
   
       const query = `
         SELECT r.reviewtext, u.name AS name
@@ -877,7 +873,6 @@ app.get('/api/public-stocklists', (req, res) => {
       `;
   
       client.query(query, [stocklistid], (err, results) => {
-        // console.log(results.rows);
         if (err) {
           console.error("Error fetching stocklist reviews:", err);
           res.status(500).send("Internal Server Error");
@@ -1035,9 +1030,6 @@ app.post('/api/add-stock-data', (req, res) => {
         return res.status(200).json({ error: 'You cannot send a friend request to yourself' });
       }
 
-      // Log the request body
-      console.log('Request body:', req.body);
-
       // Validate the request body
       if (!receiveemail) {
         return res.status(400).json({ error: 'receiveemail is required' });
@@ -1049,7 +1041,6 @@ app.post('/api/add-stock-data', (req, res) => {
       `;
   
       client.query(checkReciprocalQuery, [receiveemail, senderemail], (err, result) => {
-        console.log('Reciprocal Query Result:', result.rows);
         if (err) {
           console.error('Error checking reciprocal friend request:', err);
           res.status(500).send('Internal Server Error');
@@ -1094,11 +1085,7 @@ app.post('/api/add-stock-data', (req, res) => {
             res.status(500).send('Internal Server Error');
           } else if (result.rows.length > 0) {
             const declinedTimestamp = new Date(result.rows[0].timestamp);
-            // Print the timestamp
-            console.log('Declined Timestamp:', declinedTimestamp);
-
             const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-            console.log('Five Minutes Ago:', fiveMinutesAgo);
 
             if (declinedTimestamp > fiveMinutesAgo) {
               res.status(200).json({ error: 'This user declined your friend request or unfriended you less than 5 minutes ago.' });
