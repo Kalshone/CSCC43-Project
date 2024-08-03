@@ -1351,6 +1351,96 @@ app.get('/api/portfolio/:id/covariance-matrix', async (req, res) => {
     }
   });
 
+  // Fetch historical stock data
+app.get('/api/stock-history/:symbol', async (req, res) => {
+  const stockSymbol = req.params.symbol;
+
+  const query = 'SELECT * FROM stockdata WHERE code = $1 ORDER BY timestamp ASC';
+  try {
+    const result = await client.query(query, [stockSymbol]);
+    if (result.rows.length === 0) {
+      return res.status(404).send('No stock data found for the given symbol');
+    }
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching stock history:', err);
+    res.status(500).send('Error fetching stock history');
+  }
+});
+
+// Fetch historical portfolio values
+app.get('/api/portfolio-history/:id', async (req, res) => {
+  const portfolioId = parseInt(req.params.id, 10);
+
+  if (isNaN(portfolioId)) {
+    return res.status(400).send('Invalid portfolio ID');
+  }
+
+  const portfolioQuery = `
+    SELECT sh.stocksymbol, sh.numshares
+    FROM Stocklistholdings slh
+    JOIN Stockholdings sh ON slh.stockholdingid = sh.stockholdingid
+    WHERE slh.stocklistid = (
+      SELECT stocklistid FROM Portfolios WHERE portfolioid = $1
+    );
+  `;
+  
+  const stockHistoryQuery = `
+    SELECT code, timestamp, close
+    FROM stockdata
+    WHERE code = ANY($1::text[])
+    ORDER BY timestamp ASC;
+  `;
+
+  try {
+    const portfolioResult = await client.query(portfolioQuery, [portfolioId]);
+    const stocks = portfolioResult.rows;
+    if (stocks.length === 0) {
+      return res.status(404).send('Portfolio not found or empty');
+    }
+
+    const stockSymbols = stocks.map(stock => stock.stocksymbol);
+    const stockHistoryResult = await client.query(stockHistoryQuery, [stockSymbols]);
+
+    const stockHistory = stockHistoryResult.rows;
+
+    const portfolioValues = calculatePortfolioHistory(stocks, stockHistory);
+
+    res.json(portfolioValues);
+  } catch (err) {
+    console.error('Error fetching portfolio history:', err);
+    res.status(500).send('Error fetching portfolio history');
+  }
+});
+
+function calculatePortfolioHistory(stocks, stockHistory) {
+  const groupedData = stockHistory.reduce((acc, item) => {
+    const date = new Date(item.timestamp);
+    const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    if (!acc[month]) {
+      acc[month] = {};
+    }
+    if (!acc[month][item.code]) {
+      acc[month][item.code] = 0;
+    }
+    acc[month][item.code] = item.close;
+    return acc;
+  }, {});
+
+  const portfolioValues = Object.keys(groupedData).map(month => {
+    const monthData = groupedData[month];
+    const totalValue = stocks.reduce((acc, stock) => {
+      const stockValue = monthData[stock.stocksymbol] * stock.numshares || 0;
+      return acc + stockValue;
+    }, 0);
+    return { month, totalValue: totalValue.toFixed(2) };
+  });
+
+  return portfolioValues;
+}
+
+
+
   app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
   });

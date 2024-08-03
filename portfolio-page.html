@@ -2,6 +2,8 @@
 <html>
 <head>
   <title>Portfolio Page</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -14,18 +16,18 @@
       width: 100%;
       overflow-x: auto;
     }
-    .stock-table, .input-table, .stats-table, .covariance-table {
+    .stock-table, .input-table, .stats-table, .covariance-table, .performance-table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 20px;
       table-layout: fixed;
     }
-    .stock-table th, .stock-table td, .input-table th, .input-table td, .stats-table th, .stats-table td, .covariance-table th, .covariance-table td {
+    .stock-table th, .stock-table td, .input-table th, .input-table td, .stats-table th, .stats-table td, .covariance-table th, .covariance-table td, .performance-table th, .performance-table td {
       border: 1px solid #ccc;
       padding: 10px;
       text-align: left;
     }
-    .stock-table th, .input-table th, .stats-table th, .covariance-table th {
+    .stock-table th, .input-table th, .stats-table th, .covariance-table th, .performance-table th {
       background-color: #f4f4f4;
     }
     .input-table td {
@@ -113,10 +115,25 @@
     </table>
   </div>
 
+  <h2>Past Portfolio Performance</h2>
+  <canvas id="performance-chart"></canvas>
+  <div class="table-container">
+    <table class="performance-table" id="performance-table">
+      <thead>
+        <tr>
+          <th>Month</th>
+          <th>Portfolio Value</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const urlParams = new URLSearchParams(window.location.search);
       const portfolioId = urlParams.get('id');
+      let performanceChart;
 
       if (portfolioId) {
         fetch(`/api/portfolio/${portfolioId}`)
@@ -219,6 +236,7 @@
 
                     fetchPortfolioStats(portfolioId);
                     fetchCovarianceMatrix(portfolioId);
+                    fetchPerformanceData(portfolioId, stockData);
                   })
                   .catch(error => console.error('Error fetching stock data:', error));
               }
@@ -329,6 +347,98 @@
             });
           })
           .catch(error => console.error('Error fetching covariance matrix:', error));
+      }
+
+      function fetchPerformanceData(portfolioId, stockData) {
+        const performanceTableBody = document.getElementById('performance-table').querySelector('tbody');
+        performanceTableBody.innerHTML = '';
+
+        const promises = stockData.map(stock => {
+          return fetch(`/api/stock-history/${stock.stocksymbol}`)
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Network response was not ok');
+              }
+              return response.json();
+            })
+            .then(data => {
+              const monthlyData = groupByMonth(data);
+              return { stock, monthlyData };
+            });
+        });
+
+        Promise.all(promises)
+          .then(results => {
+            const portfolioHistory = {};
+
+            results.forEach(({ stock, monthlyData }) => {
+              Object.keys(monthlyData).forEach(month => {
+                if (!portfolioHistory[month]) {
+                  portfolioHistory[month] = 0;
+                }
+                portfolioHistory[month] += stock.numshares * monthlyData[month].close;
+              });
+            });
+
+            const months = Object.keys(portfolioHistory).sort();
+            const portfolioValues = months.map(month => portfolioHistory[month]);
+
+            const ctx = document.getElementById('performance-chart').getContext('2d');
+            performanceChart = new Chart(ctx, {
+              type: 'line',
+              data: {
+                labels: months,
+                datasets: [{
+                  label: 'Portfolio Value',
+                  data: portfolioValues,
+                  borderColor: 'rgba(54, 162, 235, 1)',
+                  backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                  borderWidth: 1
+                }]
+              },
+              options: {
+                scales: {
+                  x: {
+                    type: 'time',
+                    time: {
+                      unit: 'month',
+                      tooltipFormat: 'MMM yyyy',
+                      displayFormats: {
+                        month: 'MMM yyyy'
+                      }
+                    }
+                  },
+                  y: {
+                    beginAtZero: false
+                  }
+                }
+              }
+            });
+
+            Object.keys(portfolioHistory).forEach(month => {
+              const row = document.createElement('tr');
+              const monthCell = document.createElement('td');
+              monthCell.textContent = month;
+              const valueCell = document.createElement('td');
+              valueCell.textContent = portfolioHistory[month].toFixed(2);
+              row.appendChild(monthCell);
+              row.appendChild(valueCell);
+              performanceTableBody.appendChild(row);
+            });
+          })
+          .catch(error => console.error('Error fetching performance data:', error));
+      }
+
+      function groupByMonth(data) {
+        return data.reduce((acc, item) => {
+          const date = new Date(item.timestamp);
+          const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          if (!acc[month]) {
+            acc[month] = { close: 0, count: 0 };
+          }
+          acc[month].close = item.close;
+          return acc;
+        }, {});
       }
     });
   </script>
