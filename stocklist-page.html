@@ -68,9 +68,17 @@
 
   <div class="section">
     <h2>Reviews on this Stocklist</h2>
-    <ul id="stocklist-reviews">
-      <!-- List of reviews on this stocklist will be added here -->
-    </ul>
+    <ul id="stocklist-reviews"></ul>
+  </div>
+
+  <div class="section add-review" style="display: none;">
+    <h2>Add a review</h2>
+    <button type="button" id="add-review-button">Add Review</button>
+    <form id="add-review-form" style="display: none;">
+      <label for="review-text">Review:</label>
+      <textarea id="review-text" name="review-text" required></textarea>
+      <button type="submit">Submit</button>
+    </form>
   </div>
 
   <a href="/dashboard">Back to Dashboard</a>
@@ -81,6 +89,38 @@
       const stocklistid = urlParams.get('id');
 
       fetchStocklistReviews(stocklistid);
+
+      const addReviewButton = document.getElementById("add-review-button");
+      const addReviewForm = document.getElementById("add-review-form");
+
+      addReviewButton.addEventListener("click", () => {
+        addReviewForm.style.display = "block";
+      });
+
+      addReviewForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const reviewtext = document.getElementById("review-text").value;
+
+        // Assuming you have an API endpoint to handle the review submission
+        fetch("/api/add-review", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ stocklistid, reviewtext })
+        })
+        .then(response => response.json())
+        .then(data => {
+          addReviewForm.reset();
+          addReviewForm.style.display = "none";
+          fetchStocklistReviews(stocklistid);
+          alert("Review added successfully!");
+        })
+        .catch(error => {
+          console.error("Error:", error);
+          alert("An error occurred while adding the review.");
+        });
+      });
 
       if (stocklistid) {
         fetch(`/api/stocklist/${stocklistid}`)
@@ -96,6 +136,10 @@
               document.getElementById('stocklist-name-detail').textContent = data.name || 'N/A';
               if (data.ispublic) {
                   document.getElementById('public').checked = true;
+                  const formSections = document.getElementsByClassName('add-review');
+                  for (let i = 0; i < formSections.length; i++) {
+                      formSections[i].style.display = 'block';
+                  }
               } else {
                   document.getElementById('private').checked = true;
                   const formSections = document.getElementsByClassName('form-section');

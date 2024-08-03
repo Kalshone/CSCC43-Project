@@ -762,6 +762,34 @@ app.get('/api/public-stocklists', (req, res) => {
   //     }
   //   });
   // });
+
+  // add a review
+  app.post("/api/add-review", (req, res) => {
+    if (req.session.user) {
+      const email = req.session.user.email;
+      const { stocklistid, reviewtext } = req.body;
+      console.log("stocklistid is", stocklistid);
+      console.log("reviewtext is", reviewtext);
+
+  
+      const query = `
+        INSERT INTO Reviews (email, stocklistid, reviewtext)
+        VALUES ($1, $2, $3)
+        RETURNING *;
+      `;
+  
+      client.query(query, [email, stocklistid, reviewtext], (err, result) => {
+        if (err) {
+          console.error("Error executing query", err);
+          res.status(500).send("Error adding review");
+        } else {
+          res.json(result.rows[0]);
+        }
+      });
+    } else {
+      res.status(401).send("Unauthorized");
+    }
+  });
   
   app.post("/api/stocklist-reviews", (req, res) => {
     if (req.session.user) {
