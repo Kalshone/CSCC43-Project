@@ -83,24 +83,8 @@
 
     <script>
       document.addEventListener("DOMContentLoaded", function () {
-        // Fetch session data for welcome message
         fetchSessionData();
-
-        // Fetch user's reviews
         fetchReviews();
-
-        // Add review request functionality
-        const reviewRequestInput = document.getElementById('review-request-input');
-        const requestReviewButton = document.getElementById('request-review-button');
-
-        requestReviewButton.addEventListener('click', () => {
-          const userEmail = reviewRequestInput.value.trim();
-          const stocklistid = 1; // Replace with the appropriate stock list ID
-          if (userEmail) {
-            requestReview(userEmail, stocklistid);
-            reviewRequestInput.value = '';
-          }
-        });
       });
 
       function fetchSessionData() {
@@ -120,7 +104,7 @@
           .then((response) => response.json())
           .then((data) => {
             const reviewsList = document.getElementById("my-reviews-list");
-            reviewsList.innerHTML = ""; // Clear any existing list items
+            reviewsList.innerHTML = ""; 
             data.forEach((review) => {
               const listItem = document.createElement("li");
               if (review.reviewtext !== "") {
@@ -153,7 +137,7 @@
             });
 
             const reqreviewsList = document.getElementById("requested-reviews-list");
-            reqreviewsList.innerHTML = ""; // Clear any existing list items
+            reqreviewsList.innerHTML = ""; 
             data.forEach((review) => {
               const listItem = document.createElement("li");
               if (review.reviewtext === "") {
@@ -192,13 +176,11 @@
     function editReview(reviewId, currentReviewText) {
       const newReviewText = prompt("Edit your review:", currentReviewText);
       if (newReviewText) {
-        // Update the review using the API
         updateReview(reviewId, newReviewText);
       }
     }
 
     function deleteReview(reviewId) {
-      // Delete the review using the API
       fetch(`/api/reviews/${reviewId}`, {
         method: "DELETE",
       })
