@@ -25,160 +25,231 @@
     .stock-item button {
       margin-left: 10px;
     }
+    .compare-section {
+      margin-bottom: 20px;
+    }
+    .compare-results {
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
   <h1>Stocks</h1>
+
+  <div class="compare-section">
+    <h2>Compare Covariation and Correlation</h2>
+    <label for="stock1-select">Stock 1:</label>
+    <select id="stock1-select">
+      <option value="" disabled selected>Select a stock</option>
+    </select>
+    <label for="stock2-select">Stock 2:</label>
+    <select id="stock2-select">
+      <option value="" disabled selected>Select a stock</option>
+    </select>
+    <button id="compare-button">Compare</button>
+    <div class="compare-results">
+      <p><strong>Covariation:</strong> <span id="covariation-result">N/A</span></p>
+      <p><strong>Correlation:</strong> <span id="correlation-result">N/A</span></p>
+    </div>
+  </div>
+  <h2>All Stocks</h2>
   <div id="stock-list"></div>
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      fetch('/api/stocks')
-        .then(response => response.json())
-        .then(stocks => {
-          return Promise.all([
-            Promise.resolve(stocks),
-            fetch('/api/portfolios').then(response => response.json()),
-            fetch('/api/stocklists').then(response => response.json())
-          ]);
-        })
-        .then(([stocks, portfolios, stocklists]) => {
-          const stockList = document.getElementById('stock-list');
-          const portfolioStocklistIds = portfolios.map(portfolio => portfolio.stocklistid);
+  const stock1Select = document.getElementById('stock1-select');
+  const stock2Select = document.getElementById('stock2-select');
+  const compareButton = document.getElementById('compare-button');
+  const covariationResult = document.getElementById('covariation-result');
+  const correlationResult = document.getElementById('correlation-result');
 
-          stocks.forEach(stock => {
-            const stockItem = document.createElement('div');
-            stockItem.classList.add('stock-item');
+  fetch('/api/stocks')
+    .then(response => response.json())
+    .then(stocks => {
+      return Promise.all([
+        Promise.resolve(stocks),
+        fetch('/api/portfolios').then(response => response.json()),
+        fetch('/api/stocklists').then(response => response.json())
+      ]);
+    })
+    .then(([stocks, portfolios, stocklists]) => {
+      const stockList = document.getElementById('stock-list');
+      const portfolioStocklistIds = portfolios.map(portfolio => portfolio.stocklistid);
 
-            const stockCode = document.createElement('div');
-            const stockLink = document.createElement('a');
-            stockLink.href = `/stock-detail.html?code=${stock.code}`;
-            stockLink.textContent = stock.code;
-            stockCode.appendChild(stockLink);
+      stocks.forEach(stock => {
+        const stockItem = document.createElement('div');
+        stockItem.classList.add('stock-item');
 
-            const stockPrice = document.createElement('div');
-            stockPrice.textContent = `Price: ${stock.close}`;
+        const stockCode = document.createElement('div');
+        const stockLink = document.createElement('a');
+        stockLink.href = `/stock-detail.html?code=${stock.code}`;
+        stockLink.textContent = stock.code;
+        stockCode.appendChild(stockLink);
 
-            const sharesInput = document.createElement('input');
-            sharesInput.type = 'number';
-            sharesInput.placeholder = 'Number of shares';
+        const stockPrice = document.createElement('div');
+        stockPrice.textContent = `Price: ${stock.close}`;
 
-            const buySelect = document.createElement('select');
-            const buyOption = document.createElement('option');
-            buyOption.textContent = 'Buy';
-            buyOption.disabled = true;
-            buyOption.selected = true;
-            buySelect.appendChild(buyOption);
-            portfolios.forEach(portfolio => {
-              const option = document.createElement('option');
-              option.value = portfolio.portfolioid;
-              option.textContent = portfolio.name;
-              buySelect.appendChild(option);
-            });
+        const sharesInput = document.createElement('input');
+        sharesInput.type = 'number';
+        sharesInput.placeholder = 'Number of shares';
 
-            const addToStocklistSelect = document.createElement('select');
-            const addOption = document.createElement('option');
-            addOption.textContent = 'Add to Stocklist';
-            addOption.disabled = true;
-            addOption.selected = true;
-            addToStocklistSelect.appendChild(addOption);
-            const filteredStocklists = stocklists.filter(stocklist => !portfolioStocklistIds.includes(stocklist.stocklistid));  
-            filteredStocklists.forEach(stocklist => {
-              const option = document.createElement('option');
-              option.value = stocklist.stocklistid;
-              option.textContent = stocklist.name;
-              addToStocklistSelect.appendChild(option);
-            });
+        const buySelect = document.createElement('select');
+        const buyOption = document.createElement('option');
+        buyOption.textContent = 'Buy';
+        buyOption.disabled = true;
+        buyOption.selected = true;
+        buySelect.appendChild(buyOption);
+        portfolios.forEach(portfolio => {
+          const option = document.createElement('option');
+          option.value = portfolio.portfolioid;
+          option.textContent = portfolio.name;
+          buySelect.appendChild(option);
+        });
 
-            buySelect.addEventListener('change', () => {
-              const portfolioId = buySelect.value;
-              const numShares = sharesInput.value;
+        const addToStocklistSelect = document.createElement('select');
+        const addOption = document.createElement('option');
+        addOption.textContent = 'Add to Stocklist';
+        addOption.disabled = true;
+        addOption.selected = true;
+        addToStocklistSelect.appendChild(addOption);
+        const filteredStocklists = stocklists.filter(stocklist => !portfolioStocklistIds.includes(stocklist.stocklistid));  
+        filteredStocklists.forEach(stocklist => {
+          const option = document.createElement('option');
+          option.value = stocklist.stocklistid;
+          option.textContent = stocklist.name;
+          addToStocklistSelect.appendChild(option);
+        });
 
-              if (numShares > 0 && portfolioId) {
-                fetch('/api/buy-stock', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                    stockSymbol: stock.code,
-                    numShares: numShares,
-                    portfolioId: portfolioId
-                  })
-                })
-                .then(response => response.json())
-                .then(data => {
-                  if (data.success) {
-                    alert('Stock bought successfully');
-                    buySelect.selectedIndex = 0;
-                    sharesInput.value = '';
-                  } else {
-                    alert(`Error buying stock: ${data.message}`);
-                    buySelect.selectedIndex = 0;
-                    sharesInput.value = '';
-                  }
-                })
-                .catch(error => {
-                  console.error('Error:', error);
-                  alert('Error buying stock');
-                  buySelect.selectedIndex = 0;
-                  sharesInput.value = '';
-                });
+        buySelect.addEventListener('change', () => {
+          const portfolioId = buySelect.value;
+          const numShares = sharesInput.value;
+
+          if (numShares > 0 && portfolioId) {
+            fetch('/api/buy-stock', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                stockSymbol: stock.code,
+                numShares: numShares,
+                portfolioId: portfolioId
+              })
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                alert('Stock bought successfully');
+                buySelect.selectedIndex = 0;
+                sharesInput.value = '';
               } else {
-                alert('Please enter a valid number of shares and select a portfolio');
+                alert(`Error buying stock: ${data.message}`);
+                buySelect.selectedIndex = 0;
+                sharesInput.value = '';
               }
+            })
+            .catch(error => {
+              console.error('Error:', error);
+              alert('Error buying stock');
+              buySelect.selectedIndex = 0;
+              sharesInput.value = '';
             });
+          } else {
+            alert('Please enter a valid number of shares and select a portfolio');
+          }
+        });
 
-            addToStocklistSelect.addEventListener('change', () => {
-              const stocklistId = addToStocklistSelect.value;
-              const numShares = sharesInput.value;
+        addToStocklistSelect.addEventListener('change', () => {
+          const stocklistId = addToStocklistSelect.value;
+          const numShares = sharesInput.value;
 
-              if (numShares > 0 && stocklistId) {
-                fetch('/api/add-to-stocklist', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                    stockSymbol: stock.code,
-                    numShares: numShares,
-                    stocklistId: stocklistId
-                  })
-                })
-                .then(response => response.json())
-                .then(data => {
-                  if (data.success) {
-                    alert('Stock added to stocklist successfully');
-                    addToStocklistSelect.selectedIndex = 0;
-                    sharesInput.value = '';
-                  } else {
-                    alert('Error adding stock to stocklist');
-                    addToStocklistSelect.selectedIndex = 0;
-                    sharesInput.value = '';
-                  }
-                })
-                .catch(error => {
-                  console.error('Error:', error);
-                  alert('Error adding stock to stocklist');
-                  addToStocklistSelect.selectedIndex = 0;
-                  sharesInput.value = '';
-                });
+          if (numShares > 0 && stocklistId) {
+            fetch('/api/add-to-stocklist', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                stockSymbol: stock.code,
+                numShares: numShares,
+                stocklistId: stocklistId
+              })
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                alert('Stock added to stocklist successfully');
+                addToStocklistSelect.selectedIndex = 0;
+                sharesInput.value = '';
               } else {
-                alert('Please enter a valid number of shares and select a stocklist');
+                alert('Error adding stock to stocklist');
+                addToStocklistSelect.selectedIndex = 0;
+                sharesInput.value = '';
               }
+            })
+            .catch(error => {
+              console.error('Error:', error);
+              alert('Error adding stock to stocklist');
+              addToStocklistSelect.selectedIndex = 0;
+              sharesInput.value = '';
             });
+          } else {
+            alert('Please enter a valid number of shares and select a stocklist');
+          }
+        });
 
-            stockItem.appendChild(stockCode);
-            stockItem.appendChild(stockPrice);
-            stockItem.appendChild(sharesInput);
-            stockItem.appendChild(buySelect);
-            stockItem.appendChild(addToStocklistSelect);
+        stockItem.appendChild(stockCode);
+        stockItem.appendChild(stockPrice);
+        stockItem.appendChild(sharesInput);
+        stockItem.appendChild(buySelect);
+        stockItem.appendChild(addToStocklistSelect);
 
-            stockList.appendChild(stockItem);
-          });
-        })
-        .catch(error => console.error('Error fetching stock data:', error));
-    });
-  </script>
+        stockList.appendChild(stockItem);
+
+        // Populate dropdowns for stock comparison
+        const option1 = document.createElement('option');
+        option1.value = stock.code;
+        option1.textContent = stock.code;
+        stock1Select.appendChild(option1);
+
+        const option2 = document.createElement('option');
+        option2.value = stock.code;
+        option2.textContent = stock.code;
+        stock2Select.appendChild(option2);
+      });
+    })
+    .catch(error => console.error('Error fetching stock data:', error));
+
+  compareButton.addEventListener('click', () => {
+    const stock1 = stock1Select.value;
+    const stock2 = stock2Select.value;
+
+    if (!stock1 || !stock2 || stock1 === stock2) {
+      alert('Please select two different stocks for comparison.');
+      return;
+    }
+
+    fetch(`/api/compare-stocks/${stock1}/${stock2}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          covariationResult.textContent = data.covariation.toFixed(4);
+          correlationResult.textContent = data.correlation.toFixed(4);
+        } else {
+          alert('Error comparing stocks');
+          covariationResult.textContent = 'N/A';
+          correlationResult.textContent = 'N/A';
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('Error comparing stocks');
+        covariationResult.textContent = 'N/A';
+        correlationResult.textContent = 'N/A';
+      });
+  });
+});
+</script>
 </body>
 </html>
+

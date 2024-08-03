@@ -5,6 +5,7 @@
     "express": "^4.19.2",
     "express-handlebars": "^7.1.3",
     "express-session": "^1.18.0",
+    "node-cache": "^5.1.2",
     "pg": "^8.12.0"
   },
   "name": "cscc43",
