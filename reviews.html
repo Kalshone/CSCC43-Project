@@ -57,7 +57,7 @@
     <h1>Reviews Page</h1>
     <div id="welcome-message">Welcome</div>
 
-    <div class="section form-section">
+    <!-- <div class="section form-section">
       <h2>Request a Review</h2>
       <form action="/request-review" method="post">
         <input
@@ -69,7 +69,7 @@
         />
         <button type="button" id="request-review-button">Request Review</button>
       </form>
-    </div>
+    </div> -->
 
     <div class="section list-section">
       <h2>My Requested Reviews</h2>
@@ -189,22 +189,23 @@
           .catch((error) => console.error("Error fetching reviews:", error));
       }
 
-      function requestReview(userEmail, stockListId) {
-        fetch("/api/request-review", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ email: userEmail, stockListID: stockListId, reviewText: "" }),
-        })
-          .then((response) => response.json())
-          .then((data) => {
-            console.log("Review requested:", data);
-          })
-          .catch((error) =>
-            console.error("Error requesting review:", error)
-          );
-      }
+      // function requestReview(userEmail, stockListId) {
+      //   fetch("/api/request-review", {
+      //     method: "POST",
+      //     headers: {
+      //       "Content-Type": "application/json",
+      //     },
+      //     body: JSON.stringify({ email: userEmail, stockListID: stockListId, reviewText: "" }),
+      //   })
+      //     .then((response) => response.json())
+      //     .then((data) => {
+      //       console.log("Review requested:", data);
+      //     })
+      //     .catch((error) =>
+      //       alert(error);
+      //       console.error("Error requesting review:", error)
+      //     );
+      // }
 
     function editReview(reviewId, currentReviewText) {
       const newReviewText = prompt("Edit your review:", currentReviewText);

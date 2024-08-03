@@ -750,18 +750,34 @@ app.get('/api/public-stocklists', (req, res) => {
     if (req.session.user) {
       const { email, stocklistid, reviewText } = req.body;
   
-      const query = `
-        INSERT INTO Reviews (email, stocklistid, reviewText)
-        VALUES ($1, $2, $3)
-        RETURNING *
+      // First, check if there is already a pending review request
+      const checkQuery = `
+        SELECT * FROM Reviews
+        WHERE email = $1 AND stocklistid = $2 AND reviewText = ''
       `;
   
-      client.query(query, [email, stocklistid, reviewText], (err, result) => {
+      client.query(checkQuery, [email, stocklistid], (err, result) => {
         if (err) {
           console.error("Error executing query", err);
-          res.status(500).send("Error requesting review");
+          res.status(500).send("Error checking existing review request");
+        } else if (result.rows.length > 0) { 
+          return res.status(200).json({ err: "Review request already exists" }); // Send JSON response
         } else {
-          res.json(result.rows[0]);
+          // If no existing request, insert the new review request
+          const insertQuery = `
+            INSERT INTO Reviews (email, stocklistid, reviewText)
+            VALUES ($1, $2, $3)
+            RETURNING *
+          `;
+  
+          client.query(insertQuery, [email, stocklistid, reviewText], (err, result) => {
+            if (err) {
+              console.error("Error executing query", err);
+              res.status(500).send("Error requesting review");
+            } else {
+              res.json(result.rows[0]);
+            }
+          });
         }
       });
     } else {
