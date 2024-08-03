@@ -16,18 +16,18 @@
       width: 100%;
       overflow-x: auto;
     }
-    .stock-table, .input-table, .stats-table {
+    .stock-table, .input-table, .stats-table, .prediction-table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 20px;
       table-layout: fixed;
     }
-    .stock-table th, .stock-table td, .input-table th, .input-table td, .stats-table th, .stats-table td {
+    .stock-table th, .stock-table td, .input-table th, .input-table td, .stats-table th, .stats-table td, .prediction-table th, .prediction-table td {
       border: 1px solid #ccc;
       padding: 10px;
       text-align: left;
     }
-    .stock-table th, .input-table th, .stats-table th {
+    .stock-table th, .input-table th, .stats-table th, .prediction-table th {
       background-color: #f4f4f4;
     }
     .input-table td {
@@ -125,6 +125,20 @@
     </table>
   </div>
 
+  <h2>Predicted Stock Prices</h2>
+  <div class="table-container">
+    <table class="prediction-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Predicted Close Price</th>
+        </tr>
+      </thead>
+      <tbody id="prediction-body">
+      </tbody>
+    </table>
+  </div>
+
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const urlParams = new URLSearchParams(window.location.search);
@@ -133,90 +147,108 @@
 
       if (stockCode) {
         document.getElementById('stock-code').textContent = stockCode;
-        fetch(`/api/stock-detail/${stockCode}`)
-          .then(response => {
-            if (!response.ok) {
-              throw new Error('Network response was not ok');
-            }
-            return response.json();
-          })
-          .then(data => {
-            if (data && data.length > 0) {
-              const stockTableBody = document.getElementById('stock-table').querySelector('tbody');
-              data.forEach(stock => {
-                const row = document.createElement('tr');
-                const timestampCell = document.createElement('td');
-                const formattedTimestamp = new Date(stock.timestamp).toISOString().split('T')[0];
-                timestampCell.textContent = formattedTimestamp;
-                const openCell = document.createElement('td');
-                openCell.textContent = stock.open;
-                const highCell = document.createElement('td');
-                highCell.textContent = stock.high;
-                const lowCell = document.createElement('td');
-                lowCell.textContent = stock.low;
-                const closeCell = document.createElement('td');
-                closeCell.textContent = stock.close;
-                const volumeCell = document.createElement('td');
-                volumeCell.textContent = stock.volume;
-                row.appendChild(timestampCell);
-                row.appendChild(openCell);
-                row.appendChild(highCell);
-                row.appendChild(lowCell);
-                row.appendChild(closeCell);
-                row.appendChild(volumeCell);
-                stockTableBody.appendChild(row);
-              });
 
-              const timestamps = data.map(stock => new Date(stock.timestamp));
-              const closePrices = data.map(stock => stock.close);
+        Promise.all([
+          fetch(`/api/stock-detail/${stockCode}`).then(response => response.json()),
+          fetch(`/api/stock-stats/${stockCode}`).then(response => response.json()),
+          fetch(`/api/predictions/${stockCode}`).then(response => response.json())
+        ])
+        .then(([stockData, stats, predictions]) => {
+          if (stockData && stockData.length > 0) {
+            const stockTableBody = document.getElementById('stock-table').querySelector('tbody');
+            stockData.forEach(stock => {
+              const row = document.createElement('tr');
+              const timestampCell = document.createElement('td');
+              const formattedTimestamp = new Date(stock.timestamp).toISOString().split('T')[0];
+              timestampCell.textContent = formattedTimestamp;
+              const openCell = document.createElement('td');
+              openCell.textContent = stock.open;
+              const highCell = document.createElement('td');
+              highCell.textContent = stock.high;
+              const lowCell = document.createElement('td');
+              lowCell.textContent = stock.low;
+              const closeCell = document.createElement('td');
+              closeCell.textContent = stock.close;
+              const volumeCell = document.createElement('td');
+              volumeCell.textContent = stock.volume;
+              row.appendChild(timestampCell);
+              row.appendChild(openCell);
+              row.appendChild(highCell);
+              row.appendChild(lowCell);
+              row.appendChild(closeCell);
+              row.appendChild(volumeCell);
+              stockTableBody.appendChild(row);
+            });
 
-              const ctx = document.getElementById('stock-chart').getContext('2d');
-              stockChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                  labels: timestamps,
-                  datasets: [{
+            const timestamps = stockData.map(stock => new Date(stock.timestamp));
+            const closePrices = stockData.map(stock => stock.close);
+            const predictionDates = predictions.map(prediction => new Date(prediction.date));
+            const predictedClosePrices = predictions.map(prediction => prediction.predictedClose);
+
+            const ctx = document.getElementById('stock-chart').getContext('2d');
+            stockChart = new Chart(ctx, {
+              type: 'line',
+              data: {
+                labels: [...timestamps, ...predictionDates],
+                datasets: [
+                  {
                     label: 'Close Price',
                     data: closePrices,
                     borderColor: 'rgba(75, 192, 192, 1)',
                     backgroundColor: 'rgba(75, 192, 192, 0.2)',
                     borderWidth: 1
-                  }]
-                },
-                options: {
-                  scales: {
-                    x: {
-                      type: 'time',
-                      time: {
-                        unit: 'month',
-                        tooltipFormat: 'MMM yyyy',
-                        displayFormats: {
-                          month: 'MMM yyyy'
-                        }
+                  },
+                  {
+                    label: 'Predicted Close Price',
+                    data: new Array(closePrices.length).concat(predictedClosePrices),
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                    borderDash: [5, 5],
+                    borderWidth: 1
+                  }
+                ]
+              },
+              options: {
+                scales: {
+                  x: {
+                    type: 'time',
+                    time: {
+                      unit: 'month',
+                      tooltipFormat: 'MMM yyyy',
+                      displayFormats: {
+                        month: 'MMM yyyy'
                       }
-                    },
-                    y: {
-                      beginAtZero: false
                     }
+                  },
+                  y: {
+                    beginAtZero: false
                   }
                 }
-              });
+              }
+            });
 
-              fetch(`/api/stock-stats/${stockCode}`)
-                .then(response => response.json())
-                .then(stats => {
-                  document.getElementById('avg-return-value').textContent = stats.averageReturn;
-                  document.getElementById('variance-value').textContent = stats.variance;
-                  document.getElementById('stddev-value').textContent = stats.stddev;
-                  document.getElementById('cov-value').textContent = stats.cov;
-                  document.getElementById('beta-value').textContent = stats.beta;
-                })
-                .catch(error => console.error('Error fetching stock statistics:', error));
-            } else {
-              console.error('No data available for the given stock code.');
-            }
-          })
-          .catch(error => console.error('Error fetching stock detail:', error));
+            document.getElementById('avg-return-value').textContent = stats.averageReturn;
+            document.getElementById('variance-value').textContent = stats.variance;
+            document.getElementById('stddev-value').textContent = stats.stddev;
+            document.getElementById('cov-value').textContent = stats.cov;
+            document.getElementById('beta-value').textContent = stats.beta;
+
+            const predictionBody = document.getElementById('prediction-body');
+            predictions.forEach(prediction => {
+              const row = document.createElement('tr');
+              const dateCell = document.createElement('td');
+              dateCell.textContent = prediction.date;
+              const predictedCloseCell = document.createElement('td');
+              predictedCloseCell.textContent = prediction.predictedClose.toFixed(2);
+              row.appendChild(dateCell);
+              row.appendChild(predictedCloseCell);
+              predictionBody.appendChild(row);
+            });
+          } else {
+            console.error('No data available for the given stock code.');
+          }
+        })
+        .catch(error => console.error('Error fetching data:', error));
 
         document.getElementById('add-stock-data-button').addEventListener('click', function() {
           const newTimestamp = document.getElementById('new-timestamp').value;
@@ -298,6 +330,24 @@
                         document.getElementById('beta-value').textContent = stats.beta;
                       })
                       .catch(error => console.error('Error fetching stock statistics:', error));
+
+                    fetch(`/api/predictions/${stockCode}`)
+                      .then(response => response.json())
+                      .then(predictions => {
+                        const predictionBody = document.getElementById('prediction-body');
+                        predictionBody.innerHTML = '';
+                        predictions.forEach(prediction => {
+                          const row = document.createElement('tr');
+                          const dateCell = document.createElement('td');
+                          dateCell.textContent = prediction.date;
+                          const predictedCloseCell = document.createElement('td');
+                          predictedCloseCell.textContent = prediction.predictedClose.toFixed(2);
+                          row.appendChild(dateCell);
+                          row.appendChild(predictedCloseCell);
+                          predictionBody.appendChild(row);
+                        });
+                      })
+                      .catch(error => console.error('Error fetching predictions:', error));
                   })
                   .catch(error => console.error('Error fetching stock detail:', error));
               } else {

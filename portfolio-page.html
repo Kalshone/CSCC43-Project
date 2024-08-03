@@ -2,6 +2,8 @@
 <html>
 <head>
   <title>Portfolio Page</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -14,18 +16,18 @@
       width: 100%;
       overflow-x: auto;
     }
-    .stock-table, .input-table, .stats-table, .covariance-table {
+    .stock-table, .input-table, .stats-table, .covariance-table, .performance-table, .prediction-table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 20px;
       table-layout: fixed;
     }
-    .stock-table th, .stock-table td, .input-table th, .input-table td, .stats-table th, .stats-table td, .covariance-table th, .covariance-table td {
+    .stock-table th, .stock-table td, .input-table th, .input-table td, .stats-table th, .stats-table td, .covariance-table th, .covariance-table td, .performance-table th, .performance-table td, .prediction-table th, .prediction-table td {
       border: 1px solid #ccc;
       padding: 10px;
       text-align: left;
     }
-    .stock-table th, .input-table th, .stats-table th, .covariance-table th {
+    .stock-table th, .input-table th, .stats-table th, .covariance-table th, .performance-table th, .prediction-table th {
       background-color: #f4f4f4;
     }
     .input-table td {
@@ -113,12 +115,102 @@
     </table>
   </div>
 
+  <h2>Past Portfolio Performance</h2>
+  <canvas id="performance-chart"></canvas>
+  <div class="table-container">
+    <table class="performance-table" id="performance-table">
+      <thead>
+        <tr>
+          <th>Month</th>
+          <th>Portfolio Value</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h2>Predicted Portfolio Value</h2>
+  <canvas id="prediction-chart"></canvas>
+  <div class="table-container">
+    <table class="prediction-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Predicted Portfolio Value</th>
+        </tr>
+      </thead>
+      <tbody id="prediction-body"></tbody>
+    </table>
+  </div>
+
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const urlParams = new URLSearchParams(window.location.search);
       const portfolioId = urlParams.get('id');
+      let performanceChart;
+      let predictionChart;
 
       if (portfolioId) {
+        loadPortfolioData(portfolioId);
+
+        document.getElementById('add-cash-button').addEventListener('click', function() {
+          const cashAmountInput = document.getElementById('cash-amount');
+          const cashAmount = parseFloat(cashAmountInput.value);
+          if (!isNaN(cashAmount) && cashAmount > 0) {
+            fetch(`/api/portfolio/${portfolioId}/add-cash`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ amount: cashAmount })
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.newCashBalance !== undefined) {
+                document.getElementById('cash-balance').textContent = data.newCashBalance;
+                cashAmountInput.value = '';
+                loadPortfolioData(portfolioId);
+              } else {
+                alert('Error adding cash');
+              }
+            })
+            .catch(error => console.error('Error:', error));
+          } else {
+            alert('Please enter a valid amount');
+          }
+        });
+
+        document.getElementById('withdraw-cash-button').addEventListener('click', function() {
+          const cashAmountInput = document.getElementById('cash-amount');
+          const cashAmount = parseFloat(cashAmountInput.value);
+          if (!isNaN(cashAmount) && cashAmount > 0) {
+            fetch(`/api/portfolio/${portfolioId}/withdraw-cash`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ amount: cashAmount })
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.newCashBalance !== undefined) {
+                document.getElementById('cash-balance').textContent = data.newCashBalance;
+                cashAmountInput.value = '';
+                loadPortfolioData(portfolioId);
+              } else {
+                alert('Error withdrawing cash');
+              }
+            })
+            .catch(error => console.error('Error:', error));
+          } else {
+            alert('Please enter a valid amount');
+          }
+        });
+      } else {
+        console.error('No portfolio ID found in the URL.');
+      }
+
+      function loadPortfolioData(portfolioId) {
         fetch(`/api/portfolio/${portfolioId}`)
           .then(response => {
             if (!response.ok) {
@@ -143,7 +235,9 @@
                   })
                   .then(stockData => {
                     const stockTableBody = document.getElementById('stock-table').querySelector('tbody');
+                    stockTableBody.innerHTML = ''; // Clear existing rows
                     let totalValue = 0;
+
                     stockData.forEach(stock => {
                       const row = document.createElement('tr');
                       const stockSymbolCell = document.createElement('td');
@@ -193,12 +287,7 @@
                               numSharesCell.textContent = newNumShares;
                             }
                             numSharesToSellInput.value = '';
-                            const stockValueAfterSell = newNumShares * stock.close;
-                            totalValue = totalValue - stockValue + stockValueAfterSell;
-                            document.getElementById('portfolio-value').textContent = totalValue.toFixed(2);
-
-                            fetchPortfolioStats(portfolioId);
-                            fetchCovarianceMatrix(portfolioId);
+                            loadPortfolioData(portfolioId);
                           } else {
                             alert(`Error selling stock: ${data.message}`);
                           }
@@ -219,6 +308,8 @@
 
                     fetchPortfolioStats(portfolioId);
                     fetchCovarianceMatrix(portfolioId);
+                    fetchPerformanceData(portfolioId, stockData);
+                    fetchPredictionData(portfolioId);
                   })
                   .catch(error => console.error('Error fetching stock data:', error));
               }
@@ -227,61 +318,7 @@
             }
           })
           .catch(error => console.error('Error fetching portfolio details:', error));
-      } else {
-        console.error('No portfolio ID found in the URL.');
       }
-
-      document.getElementById('add-cash-button').addEventListener('click', function() {
-        const cashAmountInput = document.getElementById('cash-amount');
-        const cashAmount = parseFloat(cashAmountInput.value);
-        if (!isNaN(cashAmount) && cashAmount > 0) {
-          fetch(`/api/portfolio/${portfolioId}/add-cash`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ amount: cashAmount })
-          })
-          .then(response => response.json())
-          .then(data => {
-            if (data.newCashBalance !== undefined) {
-              document.getElementById('cash-balance').textContent = data.newCashBalance;
-              cashAmountInput.value = '';
-            } else {
-              alert('Error adding cash');
-            }
-          })
-          .catch(error => console.error('Error:', error));
-        } else {
-          alert('Please enter a valid amount');
-        }
-      });
-
-      document.getElementById('withdraw-cash-button').addEventListener('click', function() {
-        const cashAmountInput = document.getElementById('cash-amount');
-        const cashAmount = parseFloat(cashAmountInput.value);
-        if (!isNaN(cashAmount) && cashAmount > 0) {
-          fetch(`/api/portfolio/${portfolioId}/withdraw-cash`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ amount: cashAmount })
-          })
-          .then(response => response.json())
-          .then(data => {
-            if (data.newCashBalance !== undefined) {
-              document.getElementById('cash-balance').textContent = data.newCashBalance;
-              cashAmountInput.value = '';
-            } else {
-              alert('Error withdrawing cash');
-            }
-          })
-          .catch(error => console.error('Error:', error));
-        } else {
-          alert('Please enter a valid amount');
-        }
-      });
 
       function fetchPortfolioStats(portfolioId) {
         fetch(`/api/portfolio-stats/${portfolioId}`)
@@ -329,6 +366,160 @@
             });
           })
           .catch(error => console.error('Error fetching covariance matrix:', error));
+      }
+
+      function fetchPerformanceData(portfolioId, stockData) {
+        const performanceTableBody = document.getElementById('performance-table').querySelector('tbody');
+        performanceTableBody.innerHTML = '';
+
+        const promises = stockData.map(stock => {
+          return fetch(`/api/stock-history/${stock.stocksymbol}`)
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Network response was not ok');
+              }
+              return response.json();
+            })
+            .then(data => {
+              const monthlyData = groupByMonth(data);
+              return { stock, monthlyData };
+            });
+        });
+
+        Promise.all(promises)
+          .then(results => {
+            const portfolioHistory = {};
+
+            results.forEach(({ stock, monthlyData }) => {
+              Object.keys(monthlyData).forEach(month => {
+                if (!portfolioHistory[month]) {
+                  portfolioHistory[month] = 0;
+                }
+                portfolioHistory[month] += stock.numshares * monthlyData[month].close;
+              });
+            });
+
+            const months = Object.keys(portfolioHistory).sort();
+            const portfolioValues = months.map(month => portfolioHistory[month]);
+
+            const ctx = document.getElementById('performance-chart').getContext('2d');
+            if (performanceChart) {
+              performanceChart.destroy();
+            }
+            performanceChart = new Chart(ctx, {
+              type: 'line',
+              data: {
+                labels: months,
+                datasets: [{
+                  label: 'Portfolio Value',
+                  data: portfolioValues,
+                  borderColor: 'rgba(54, 162, 235, 1)',
+                  backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                  borderWidth: 1
+                }]
+              },
+              options: {
+                scales: {
+                  x: {
+                    type: 'time',
+                    time: {
+                      unit: 'month',
+                      tooltipFormat: 'MMM yyyy',
+                      displayFormats: {
+                        month: 'MMM yyyy'
+                      }
+                    }
+                  },
+                  y: {
+                    beginAtZero: false
+                  }
+                }
+              }
+            });
+
+            Object.keys(portfolioHistory).forEach(month => {
+              const row = document.createElement('tr');
+              const monthCell = document.createElement('td');
+              monthCell.textContent = month;
+              const valueCell = document.createElement('td');
+              valueCell.textContent = portfolioHistory[month].toFixed(2);
+              row.appendChild(monthCell);
+              row.appendChild(valueCell);
+              performanceTableBody.appendChild(row);
+            });
+          })
+          .catch(error => console.error('Error fetching performance data:', error));
+      }
+
+      function groupByMonth(data) {
+        return data.reduce((acc, item) => {
+          const date = new Date(item.timestamp);
+          const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          if (!acc[month]) {
+            acc[month] = { close: 0, count: 0 };
+          }
+          acc[month].close = item.close;
+          return acc;
+        }, {});
+      }
+
+      function fetchPredictionData(portfolioId) {
+        fetch(`/api/predicted-portfolio/${portfolioId}`)
+          .then(response => response.json())
+          .then(data => {
+            const predictionBody = document.getElementById('prediction-body');
+            predictionBody.innerHTML = '';
+
+            const dates = data.map(item => item.date);
+            const predictedValues = data.map(item => item.predictedValue);
+
+            const ctx = document.getElementById('prediction-chart').getContext('2d');
+            if (predictionChart) {
+              predictionChart.destroy();
+            }
+            predictionChart = new Chart(ctx, {
+              type: 'line',
+              data: {
+                labels: dates,
+                datasets: [{
+                  label: 'Predicted Portfolio Value',
+                  data: predictedValues,
+                  borderColor: 'rgba(255, 99, 132, 1)',
+                  backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                  borderWidth: 1
+                }]
+              },
+              options: {
+                scales: {
+                  x: {
+                    type: 'time',
+                    time: {
+                      unit: 'month',
+                      tooltipFormat: 'MMM yyyy',
+                      displayFormats: {
+                        month: 'MMM yyyy'
+                      }
+                    }
+                  },
+                  y: {
+                    beginAtZero: false
+                  }
+                }
+              }
+            });
+
+            data.forEach(item => {
+              const row = document.createElement('tr');
+              const dateCell = document.createElement('td');
+              dateCell.textContent = item.date;
+              const predictedValueCell = document.createElement('td');
+              predictedValueCell.textContent = item.predictedValue.toFixed(2);
+              row.appendChild(dateCell);
+              row.appendChild(predictedValueCell);
+              predictionBody.appendChild(row);
+            });
+          })
+          .catch(error => console.error('Error fetching prediction data:', error));
       }
     });
   </script>
