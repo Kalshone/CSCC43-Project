@@ -142,16 +142,24 @@
               document.getElementById('stocklist-name-detail').textContent = data.name || 'N/A';
               if (data.ispublic) {
                   document.getElementById('public').checked = true;
-                  const formSections = document.getElementsByClassName('add-review');
-                  for (let i = 0; i < formSections.length; i++) {
-                      formSections[i].style.display = 'block';
-                  }
+                  fetch('/api/session')
+                    .then(response => response.json())
+                    .then(sessionData => {
+                      if (sessionData.user.email == data.owner) {
+                        const requestReviewSections = document.getElementsByClassName('form-section');
+                        for (let i = 0; i < requestReviewSections.length; i++) {
+                          requestReviewSections[i].style.display = 'block';
+                        }
+                      } else {
+                        const formSections = document.getElementsByClassName('add-review');
+                        for (let i = 0; i < formSections.length; i++) {
+                            formSections[i].style.display = 'block';
+                        }
+                      }
+                    })
+                    .catch(error => console.error('Error fetching session data:', error));
               } else {
                   document.getElementById('private').checked = true;
-                  const formSections = document.getElementsByClassName('form-section');
-                  for (let i = 0; i < formSections.length; i++) {
-                      formSections[i].style.display = 'block';
-                  }
                   // if the user is not the owner of the stocklist, set the dispaly of section reviews to none:
                   fetch('/api/session')
                     .then(response => response.json())
@@ -164,6 +172,11 @@
                         const formSections = document.getElementsByClassName('add-review');
                         for (let i = 0; i < formSections.length; i++) {
                             formSections[i].style.display = 'block';
+                        }
+                      } else {
+                        const requestReviewSections = document.getElementsByClassName('form-section');
+                        for (let i = 0; i < requestReviewSections.length; i++) {
+                          requestReviewSections[i].style.display = 'block';
                         }
                       }
                     })
