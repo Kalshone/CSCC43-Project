@@ -1167,6 +1167,73 @@ app.get('/api/portfolio-stats/:id', async (req, res) => {
     res.status(500).send('Error fetching portfolio stats');
   }
 });
+
+// compare stocks correlation and covariation
+app.get('/api/compare-stocks/:stock1/:stock2', (req, res) => {
+  const stock1 = req.params.stock1;
+  const stock2 = req.params.stock2;
+  const cacheKey = `compare-stocks-${stock1}-${stock2}`;
+
+  const cachedData = cache.get(cacheKey);
+  if (cachedData) {
+    return res.json(cachedData);
+  }
+
+  if (!stock1 || !stock2 || stock1 === stock2) {
+    return res.status(400).send({ success: false, message: 'Invalid stock selection' });
+  }
+
+  const query = `
+    SELECT timestamp::date as date, code, close
+    FROM stockdata
+    WHERE code = $1 OR code = $2
+    ORDER BY date ASC
+  `;
+
+  client.query(query, [stock1, stock2], (err, result) => {
+    if (err) {
+      console.error('Error fetching stock data:', err);
+      return res.status(500).send({ success: false, message: 'Error fetching stock data' });
+    }
+
+    const stock1Data = {};
+    const stock2Data = {};
+
+    result.rows.forEach(row => {
+      if (row.code === stock1) {
+        stock1Data[row.date] = parseFloat(row.close);
+      } else if (row.code === stock2) {
+        stock2Data[row.date] = parseFloat(row.close);
+      }
+    });
+
+    const sharedDates = Object.keys(stock1Data).filter(date => date in stock2Data);
+    const stock1Prices = sharedDates.map(date => stock1Data[date]);
+    const stock2Prices = sharedDates.map(date => stock2Data[date]);
+
+    if (stock1Prices.length === 0 || stock2Prices.length === 0) {
+      return res.status(404).send({ success: false, message: 'Not enough shared data points for comparison' });
+    }
+
+    const mean1 = stock1Prices.reduce((acc, val) => acc + val, 0) / stock1Prices.length;
+    const mean2 = stock2Prices.reduce((acc, val) => acc + val, 0) / stock2Prices.length;
+
+    const covariation = stock1Prices.reduce((acc, val, idx) => acc + ((val - mean1) * (stock2Prices[idx] - mean2)), 0) / (stock1Prices.length - 1);
+    const stddev1 = Math.sqrt(stock1Prices.reduce((acc, val) => acc + Math.pow(val - mean1, 2), 0) / (stock1Prices.length - 1));
+    const stddev2 = Math.sqrt(stock2Prices.reduce((acc, val) => acc + Math.pow(val - mean2, 2), 0) / (stock2Prices.length - 1));
+    const correlation = covariation / (stddev1 * stddev2);
+
+    const comparison = {
+      success: true,
+      covariation,
+      correlation
+    };
+
+    cache.set(cacheKey, comparison);
+    res.json(comparison);
+  });
+});
+
   
   //logout
   app.get("/logout", (req, res) => {
