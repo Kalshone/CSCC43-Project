@@ -1439,6 +1439,59 @@ function calculatePortfolioHistory(stocks, stockHistory) {
   return portfolioValues;
 }
 
+// fetch portfolio prediction
+app.get('/api/predicted-portfolio/:id', async (req, res) => {
+  const portfolioId = parseInt(req.params.id, 10);
+
+  try {
+    const portfolioResult = await client.query(`
+      SELECT sh.stocksymbol, sh.numshares, sd.timestamp, sd.close
+      FROM Stocklistholdings slh
+      JOIN Stockholdings sh ON slh.stockholdingid = sh.stockholdingid
+      JOIN stockdata sd ON sd.code = sh.stocksymbol
+      WHERE slh.stocklistid = (
+        SELECT stocklistid FROM Portfolios WHERE portfolioid = $1
+      )
+      ORDER BY sd.timestamp ASC
+    `, [portfolioId]);
+
+    const stocks = portfolioResult.rows;
+    if (stocks.length === 0) {
+      return res.status(404).send('Portfolio not found or empty');
+    }
+
+    const portfolioValues = {};
+    stocks.forEach(stock => {
+      const date = new Date(stock.timestamp).toISOString().split('T')[0];
+      if (!portfolioValues[date]) {
+        portfolioValues[date] = 0;
+      }
+      portfolioValues[date] += stock.numshares * stock.close;
+    });
+
+    const timestamps = Object.keys(portfolioValues).map(date => new Date(date).getTime());
+    const values = Object.values(portfolioValues);
+
+    const regression = new SimpleLinearRegression(timestamps, values);
+
+    const lastDate = new Date(timestamps[timestamps.length - 1]);
+    const predictions = [];
+    for (let i = 1; i <= 60; i++) { // 5 years of monthly predictions
+      const futureDate = new Date(lastDate.getFullYear(), lastDate.getMonth() + i, 1);
+      const futureTimestamp = futureDate.getTime();
+      const predictedValue = regression.predict(futureTimestamp);
+      predictions.push({
+        date: futureDate.toISOString().split('T')[0],
+        predictedValue: predictedValue
+      });
+    }
+
+    res.json(predictions);
+  } catch (err) {
+    console.error('Error fetching portfolio data:', err);
+    res.status(500).send('Error fetching portfolio data');
+  }
+});
 
 
   app.listen(port, () => {

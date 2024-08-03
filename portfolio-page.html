@@ -16,18 +16,18 @@
       width: 100%;
       overflow-x: auto;
     }
-    .stock-table, .input-table, .stats-table, .covariance-table, .performance-table {
+    .stock-table, .input-table, .stats-table, .covariance-table, .performance-table, .prediction-table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 20px;
       table-layout: fixed;
     }
-    .stock-table th, .stock-table td, .input-table th, .input-table td, .stats-table th, .stats-table td, .covariance-table th, .covariance-table td, .performance-table th, .performance-table td {
+    .stock-table th, .stock-table td, .input-table th, .input-table td, .stats-table th, .stats-table td, .covariance-table th, .covariance-table td, .performance-table th, .performance-table td, .prediction-table th, .prediction-table td {
       border: 1px solid #ccc;
       padding: 10px;
       text-align: left;
     }
-    .stock-table th, .input-table th, .stats-table th, .covariance-table th, .performance-table th {
+    .stock-table th, .input-table th, .stats-table th, .covariance-table th, .performance-table th, .prediction-table th {
       background-color: #f4f4f4;
     }
     .input-table td {
@@ -129,11 +129,26 @@
     </table>
   </div>
 
+  <h2>Predicted Portfolio Value</h2>
+  <canvas id="prediction-chart"></canvas>
+  <div class="table-container">
+    <table class="prediction-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Predicted Portfolio Value</th>
+        </tr>
+      </thead>
+      <tbody id="prediction-body"></tbody>
+    </table>
+  </div>
+
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const urlParams = new URLSearchParams(window.location.search);
       const portfolioId = urlParams.get('id');
       let performanceChart;
+      let predictionChart;
 
       if (portfolioId) {
         fetch(`/api/portfolio/${portfolioId}`)
@@ -237,6 +252,7 @@
                     fetchPortfolioStats(portfolioId);
                     fetchCovarianceMatrix(portfolioId);
                     fetchPerformanceData(portfolioId, stockData);
+                    fetchPredictionData(portfolioId);
                   })
                   .catch(error => console.error('Error fetching stock data:', error));
               }
@@ -278,7 +294,7 @@
       document.getElementById('withdraw-cash-button').addEventListener('click', function() {
         const cashAmountInput = document.getElementById('cash-amount');
         const cashAmount = parseFloat(cashAmountInput.value);
-        if (!isNaN(cashAmount) && cashAmount > 0) {
+        if (!isNaN(cCashAmount) && cashAmount > 0) {
           fetch(`/api/portfolio/${portfolioId}/withdraw-cash`, {
             method: 'PUT',
             headers: {
@@ -439,6 +455,62 @@
           acc[month].close = item.close;
           return acc;
         }, {});
+      }
+
+      function fetchPredictionData(portfolioId) {
+        fetch(`/api/predicted-portfolio/${portfolioId}`)
+          .then(response => response.json())
+          .then(data => {
+            const predictionBody = document.getElementById('prediction-body');
+            predictionBody.innerHTML = '';
+
+            const dates = data.map(item => item.date);
+            const predictedValues = data.map(item => item.predictedValue);
+
+            const ctx = document.getElementById('prediction-chart').getContext('2d');
+            predictionChart = new Chart(ctx, {
+              type: 'line',
+              data: {
+                labels: dates,
+                datasets: [{
+                  label: 'Predicted Portfolio Value',
+                  data: predictedValues,
+                  borderColor: 'rgba(255, 99, 132, 1)',
+                  backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                  borderWidth: 1
+                }]
+              },
+              options: {
+                scales: {
+                  x: {
+                    type: 'time',
+                    time: {
+                      unit: 'month',
+                      tooltipFormat: 'MMM yyyy',
+                      displayFormats: {
+                        month: 'MMM yyyy'
+                      }
+                    },
+                    y: {
+                      beginAtZero: false
+                    }
+                  }
+                }
+              }
+            });
+
+            data.forEach(item => {
+              const row = document.createElement('tr');
+              const dateCell = document.createElement('td');
+              dateCell.textContent = item.date;
+              const predictedValueCell = document.createElement('td');
+              predictedValueCell.textContent = item.predictedValue.toFixed(2);
+              row.appendChild(dateCell);
+              row.appendChild(predictedValueCell);
+              predictionBody.appendChild(row);
+            });
+          })
+          .catch(error => console.error('Error fetching prediction data:', error));
       }
     });
   </script>
