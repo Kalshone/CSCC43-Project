@@ -14,6 +14,9 @@ const client = new Client({
   port: 5432,
 });
 
+const NodeCache = require('node-cache');
+const cache = new NodeCache({ stdTTL: 3600 }); // Cache for 1 hour
+
 // Middleware setup
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -316,13 +319,20 @@ app.post('/api/buy-stock', (req, res) => {
               return res.status(500).send({ success: false, message: 'Error updating portfolio cash balance' });
             }
 
-            res.send({ success: true, newCashBalance });
+            cache.del(`portfolio-stats-${portfolioId}`);
+            fetchPortfolioStats(portfolioId).then(stats => {
+              res.send({ success: true, newCashBalance, stats });
+            }).catch(fetchError => {
+              console.error('Error fetching portfolio stats:', fetchError);
+              res.send({ success: true, newCashBalance });
+            });
           });
         });
       });
     });
   });
 });
+
 
 // sell stocks
 app.post('/api/sell-stock', (req, res) => {
@@ -403,7 +413,13 @@ app.post('/api/sell-stock', (req, res) => {
                   return res.status(500).send({ success: false, message: 'Error updating portfolio cash balance' });
                 }
 
-                res.send({ success: true, newCashBalance });
+                cache.del(`portfolio-stats-${portfolioId}`);
+                fetchPortfolioStats(portfolioId).then(stats => {
+                  res.send({ success: true, newCashBalance, stats });
+                }).catch(fetchError => {
+                  console.error('Error fetching portfolio stats:', fetchError);
+                  res.send({ success: true, newCashBalance });
+                });
               });
             });
           });
@@ -414,13 +430,20 @@ app.post('/api/sell-stock', (req, res) => {
               return res.status(500).send({ success: false, message: 'Error updating portfolio cash balance' });
             }
 
-            res.send({ success: true, newCashBalance });
+            cache.del(`portfolio-stats-${portfolioId}`);
+            fetchPortfolioStats(portfolioId).then(stats => {
+              res.send({ success: true, newCashBalance, stats });
+            }).catch(fetchError => {
+              console.error('Error fetching portfolio stats:', fetchError);
+              res.send({ success: true, newCashBalance });
+            });
           });
         }
       });
     });
   });
 });
+
 
 
 
@@ -901,6 +924,372 @@ app.post('/api/add-stock-data', (req, res) => {
       res.status(401).send('Unauthorized');
     }
   });
+
+// stock stats
+app.get('/api/stock-stats/:code', async (req, res) => {
+  const stockCode = req.params.code;
+  const cacheKey = `stock-stats-${stockCode}`;
+
+  const cachedData = cache.get(cacheKey);
+  if (cachedData) {
+    return res.json(cachedData);
+  }
+
+  const stockQuery = 'SELECT * FROM stockdata WHERE code = $1 ORDER BY timestamp ASC';
+  const allStocksQuery = 'SELECT code, timestamp, close FROM stockdata ORDER BY timestamp ASC';
+
+  try {
+    const stockResult = await client.query(stockQuery, [stockCode]);
+    const allStocksResult = await client.query(allStocksQuery);
+
+    if (stockResult.rows.length === 0) {
+      return res.status(404).send('No stock data found for the given code');
+    }
+
+    const stockPrices = stockResult.rows.map(row => parseFloat(row.close));
+    const stockReturns = [];
+    for (let i = 1; i < stockPrices.length; i++) {
+      const stockDailyReturn = (stockPrices[i] - stockPrices[i - 1]) / stockPrices[i - 1];
+      stockReturns.push(stockDailyReturn);
+    }
+
+    const averageReturn = stockReturns.reduce((acc, curr) => acc + curr, 0) / stockReturns.length;
+    const variance = stockReturns.reduce((acc, curr) => acc + Math.pow(curr - averageReturn, 2), 0) / (stockReturns.length - 1);
+    const stddev = Math.sqrt(variance);
+    const cov = stddev / averageReturn;
+
+    const marketReturns = {};
+    allStocksResult.rows.forEach(row => {
+      const date = new Date(row.timestamp).toISOString().split('T')[0];
+      if (!marketReturns[date]) {
+        marketReturns[date] = [];
+      }
+      marketReturns[date].push(parseFloat(row.close));
+    });
+
+    const marketDailyReturns = [];
+    const timestamps = Object.keys(marketReturns).sort();
+    for (let i = 1; i < timestamps.length; i++) {
+      const prevAvgClose = marketReturns[timestamps[i - 1]].reduce((acc, curr) => acc + curr, 0) / marketReturns[timestamps[i - 1]].length;
+      const currAvgClose = marketReturns[timestamps[i]].reduce((acc, curr) => acc + curr, 0) / marketReturns[timestamps[i]].length;
+      const marketDailyReturn = (currAvgClose - prevAvgClose) / prevAvgClose;
+      marketDailyReturns.push(marketDailyReturn);
+    }
+
+    if (marketDailyReturns.length < stockReturns.length) {
+      stockReturns.length = marketDailyReturns.length;
+    } else {
+      marketDailyReturns.length = stockReturns.length;
+    }
+
+    const marketMean = marketDailyReturns.reduce((acc, curr) => acc + curr, 0) / marketDailyReturns.length;
+    const covariance = stockReturns.reduce((acc, curr, idx) => {
+      return acc + ((curr - averageReturn) * (marketDailyReturns[idx] - marketMean));
+    }, 0) / (stockReturns.length - 1);
+    const marketVariance = marketDailyReturns.reduce((acc, curr) => acc + Math.pow(curr - marketMean, 2), 0) / (marketDailyReturns.length - 1);
+    const beta = covariance / marketVariance;
+
+    const stats = {
+      averageReturn,
+      variance,
+      stddev,
+      cov,
+      beta
+    };
+
+    cache.set(cacheKey, stats);
+    res.json(stats);
+  } catch (error) {
+    console.error('Error fetching stock data:', error);
+    res.status(500).send('Error fetching stock data');
+  }
+});
+
+
+const fetchPortfolioStats = async (portfolioId) => {
+  const portfolioQuery = `
+    SELECT sh.stocksymbol, sh.numshares, sd.close, sd.open
+    FROM Stocklistholdings slh
+    JOIN Stockholdings sh ON slh.stockholdingid = sh.stockholdingid
+    LEFT JOIN LATERAL (
+      SELECT close, open
+      FROM stockdata sd
+      WHERE sd.code = sh.stocksymbol
+      ORDER BY sd.timestamp DESC
+      LIMIT 1
+    ) sd ON true
+    WHERE slh.stocklistid = (
+      SELECT stocklistid FROM Portfolios WHERE portfolioid = $1
+    );
+  `;
+  const allStocksQuery = 'SELECT code, timestamp, close FROM stockdata ORDER BY timestamp ASC';
+
+  const portfolioResult = await client.query(portfolioQuery, [portfolioId]);
+  const allStocksResult = await client.query(allStocksQuery);
+
+  const stocks = portfolioResult.rows;
+  if (stocks.length === 0) {
+    throw new Error('Portfolio not found or empty');
+  }
+
+  const returns = stocks.map(stock => (parseFloat(stock.close) - parseFloat(stock.open)) / parseFloat(stock.open));
+  const averageReturn = returns.reduce((sum, value) => sum + value, 0) / returns.length;
+  const variance = returns.reduce((sum, value) => sum + Math.pow(value - averageReturn, 2), 0) / returns.length;
+  const stddev = Math.sqrt(variance);
+  const cov = stddev / averageReturn;
+
+  const marketReturns = {};
+  allStocksResult.rows.forEach(row => {
+    const date = new Date(row.timestamp).toISOString().split('T')[0];
+    if (!marketReturns[date]) {
+      marketReturns[date] = [];
+    }
+    marketReturns[date].push(parseFloat(row.close));
+  });
+
+  const marketDailyReturns = [];
+  const timestamps = Object.keys(marketReturns).sort();
+  for (let i = 1; i < timestamps.length; i++) {
+    const prevAvgClose = marketReturns[timestamps[i - 1]].reduce((acc, curr) => acc + curr, 0) / marketReturns[timestamps[i - 1]].length;
+    const currAvgClose = marketReturns[timestamps[i]].reduce((acc, curr) => acc + curr, 0) / marketReturns[timestamps[i]].length;
+    const marketDailyReturn = (currAvgClose - prevAvgClose) / prevAvgClose;
+    marketDailyReturns.push(marketDailyReturn);
+  }
+
+  if (marketDailyReturns.length < returns.length) {
+    returns.length = marketDailyReturns.length;
+  } else {
+    marketDailyReturns.length = returns.length;
+  }
+
+  const marketMean = marketDailyReturns.reduce((acc, curr) => acc + curr, 0) / marketDailyReturns.length;
+  const covariance = returns.reduce((acc, curr, idx) => {
+    return acc + ((curr - averageReturn) * (marketDailyReturns[idx] - marketMean));
+  }, 0) / (returns.length - 1);
+  const marketVariance = marketDailyReturns.reduce((acc, curr) => acc + Math.pow(curr - marketMean, 2), 0) / (marketDailyReturns.length - 1);
+  const beta = covariance / marketVariance;
+
+  return {
+    averageReturn,
+    variance,
+    stddev,
+    cov,
+    beta
+  };
+};
+
+
+// fetch portfolio stats
+app.get('/api/portfolio-stats/:id', async (req, res) => {
+  const portfolioId = parseInt(req.params.id, 10);
+  const cacheKey = `portfolio-stats-${portfolioId}`;
+
+  const cachedData = cache.get(cacheKey);
+  if (cachedData) {
+    return res.json(cachedData);
+  }
+
+  const portfolioQuery = `
+    SELECT sh.stocksymbol, sh.numshares, sd.close, sd.open
+    FROM Stocklistholdings slh
+    JOIN Stockholdings sh ON slh.stockholdingid = sh.stockholdingid
+    LEFT JOIN LATERAL (
+      SELECT close, open
+      FROM stockdata sd
+      WHERE sd.code = sh.stocksymbol
+      ORDER BY sd.timestamp DESC
+      LIMIT 1
+    ) sd ON true
+    WHERE slh.stocklistid = (
+      SELECT stocklistid FROM Portfolios WHERE portfolioid = $1
+    );
+  `;
+  const allStocksQuery = 'SELECT code, timestamp, close FROM stockdata ORDER BY timestamp ASC';
+
+  try {
+    const portfolioResult = await client.query(portfolioQuery, [portfolioId]);
+    const allStocksResult = await client.query(allStocksQuery);
+
+    const stocks = portfolioResult.rows;
+    if (stocks.length === 0) {
+      return res.status(404).send('Portfolio not found or empty');
+    }
+
+    const returns = stocks.map(stock => (parseFloat(stock.close) - parseFloat(stock.open)) / parseFloat(stock.open));
+    const averageReturn = returns.reduce((sum, value) => sum + value, 0) / returns.length;
+    const variance = returns.reduce((sum, value) => sum + Math.pow(value - averageReturn, 2), 0) / returns.length;
+    const stddev = Math.sqrt(variance);
+    const cov = stddev / averageReturn;
+
+    const marketReturns = {};
+    allStocksResult.rows.forEach(row => {
+      const date = new Date(row.timestamp).toISOString().split('T')[0];
+      if (!marketReturns[date]) {
+        marketReturns[date] = [];
+      }
+      marketReturns[date].push(parseFloat(row.close));
+    });
+
+    const marketDailyReturns = [];
+    const timestamps = Object.keys(marketReturns).sort();
+    for (let i = 1; i < timestamps.length; i++) {
+      const prevAvgClose = marketReturns[timestamps[i - 1]].reduce((acc, curr) => acc + curr, 0) / marketReturns[timestamps[i - 1]].length;
+      const currAvgClose = marketReturns[timestamps[i]].reduce((acc, curr) => acc + curr, 0) / marketReturns[timestamps[i]].length;
+      const marketDailyReturn = (currAvgClose - prevAvgClose) / prevAvgClose;
+      marketDailyReturns.push(marketDailyReturn);
+    }
+
+    if (marketDailyReturns.length < returns.length) {
+      returns.length = marketDailyReturns.length;
+    } else {
+      marketDailyReturns.length = returns.length;
+    }
+
+    const marketMean = marketDailyReturns.reduce((acc, curr) => acc + curr, 0) / marketDailyReturns.length;
+    const covariance = returns.reduce((acc, curr, idx) => {
+      return acc + ((curr - averageReturn) * (marketDailyReturns[idx] - marketMean));
+    }, 0) / (returns.length - 1);
+    const marketVariance = marketDailyReturns.reduce((acc, curr) => acc + Math.pow(curr - marketMean, 2), 0) / (marketDailyReturns.length - 1);
+    const beta = covariance / marketVariance;
+
+    const stats = {
+      averageReturn,
+      variance,
+      stddev,
+      cov,
+      beta
+    };
+
+    cache.set(cacheKey, stats);
+    res.json(stats);
+  } catch (err) {
+    console.error('Error fetching portfolio stats:', err);
+    res.status(500).send('Error fetching portfolio stats');
+  }
+});
+
+// compare stocks correlation and covariation
+app.get('/api/compare-stocks/:stock1/:stock2', (req, res) => {
+  const stock1 = req.params.stock1;
+  const stock2 = req.params.stock2;
+  const cacheKey = `compare-stocks-${stock1}-${stock2}`;
+
+  const cachedData = cache.get(cacheKey);
+  if (cachedData) {
+    return res.json(cachedData);
+  }
+
+  if (!stock1 || !stock2 || stock1 === stock2) {
+    return res.status(400).send({ success: false, message: 'Invalid stock selection' });
+  }
+
+  const query = `
+    SELECT timestamp::date as date, code, close
+    FROM stockdata
+    WHERE code = $1 OR code = $2
+    ORDER BY date ASC
+  `;
+
+  client.query(query, [stock1, stock2], (err, result) => {
+    if (err) {
+      console.error('Error fetching stock data:', err);
+      return res.status(500).send({ success: false, message: 'Error fetching stock data' });
+    }
+
+    const stock1Data = {};
+    const stock2Data = {};
+
+    result.rows.forEach(row => {
+      if (row.code === stock1) {
+        stock1Data[row.date] = parseFloat(row.close);
+      } else if (row.code === stock2) {
+        stock2Data[row.date] = parseFloat(row.close);
+      }
+    });
+
+    const sharedDates = Object.keys(stock1Data).filter(date => date in stock2Data);
+    const stock1Prices = sharedDates.map(date => stock1Data[date]);
+    const stock2Prices = sharedDates.map(date => stock2Data[date]);
+
+    if (stock1Prices.length === 0 || stock2Prices.length === 0) {
+      return res.status(404).send({ success: false, message: 'Not enough shared data points for comparison' });
+    }
+
+    const mean1 = stock1Prices.reduce((acc, val) => acc + val, 0) / stock1Prices.length;
+    const mean2 = stock2Prices.reduce((acc, val) => acc + val, 0) / stock2Prices.length;
+
+    const covariation = stock1Prices.reduce((acc, val, idx) => acc + ((val - mean1) * (stock2Prices[idx] - mean2)), 0) / (stock1Prices.length - 1);
+    const stddev1 = Math.sqrt(stock1Prices.reduce((acc, val) => acc + Math.pow(val - mean1, 2), 0) / (stock1Prices.length - 1));
+    const stddev2 = Math.sqrt(stock2Prices.reduce((acc, val) => acc + Math.pow(val - mean2, 2), 0) / (stock2Prices.length - 1));
+    const correlation = covariation / (stddev1 * stddev2);
+
+    const comparison = {
+      success: true,
+      covariation,
+      correlation
+    };
+
+    cache.set(cacheKey, comparison);
+    res.json(comparison);
+  });
+});
+
+// portfolio covariance matrix
+app.get('/api/portfolio/:id/covariance-matrix', async (req, res) => {
+  const portfolioId = parseInt(req.params.id, 10);
+
+  if (isNaN(portfolioId)) {
+    return res.status(400).send('Invalid portfolio ID');
+  }
+
+  const portfolioQuery = `
+    SELECT sh.stocksymbol, sd.close
+    FROM Stocklistholdings slh
+    JOIN Stockholdings sh ON slh.stockholdingid = sh.stockholdingid
+    JOIN stockdata sd ON sd.code = sh.stocksymbol
+    WHERE slh.stocklistid = (
+      SELECT stocklistid FROM Portfolios WHERE portfolioid = $1
+    )
+    ORDER BY sd.timestamp ASC;
+  `;
+
+  try {
+    const portfolioResult = await client.query(portfolioQuery, [portfolioId]);
+    const stocks = portfolioResult.rows;
+    if (stocks.length === 0) {
+      return res.status(404).send('Portfolio not found or empty');
+    }
+
+    const stockSymbols = [...new Set(stocks.map(stock => stock.stocksymbol))];
+    const stockPrices = stockSymbols.map(symbol =>
+      stocks.filter(stock => stock.stocksymbol === symbol).map(stock => parseFloat(stock.close))
+    );
+
+    const calculateCovariance = (arr1, arr2) => {
+      const mean1 = arr1.reduce((acc, val) => acc + val, 0) / arr1.length;
+      const mean2 = arr2.reduce((acc, val) => acc + val, 0) / arr2.length;
+      return arr1.reduce((acc, val, idx) => acc + ((val - mean1) * (arr2[idx] - mean2)), 0) / (arr1.length - 1);
+    };
+
+    const covarianceMatrix = {};
+    stockSymbols.forEach((symbol1, idx1) => {
+      covarianceMatrix[symbol1] = {};
+      stockSymbols.forEach((symbol2, idx2) => {
+        const cov = calculateCovariance(stockPrices[idx1], stockPrices[idx2]);
+        covarianceMatrix[symbol1][symbol2] = cov;
+        covarianceMatrix[symbol2] = covarianceMatrix[symbol2] || {};
+        covarianceMatrix[symbol2][symbol1] = cov;
+      });
+    });
+
+    res.json(covarianceMatrix);
+  } catch (err) {
+    console.error('Error fetching covariance matrix:', err);
+    res.status(500).send('Error fetching covariance matrix');
+  }
+});
+
+
   
   //logout
   app.get("/logout", (req, res) => {
