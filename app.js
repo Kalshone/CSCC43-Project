@@ -1493,6 +1493,59 @@ app.get('/api/predicted-portfolio/:id', async (req, res) => {
   }
 });
 
+// stocklist prediction
+app.get('/api/predicted-stocklist/:id', async (req, res) => {
+  const stocklistId = parseInt(req.params.id, 10);
+
+  try {
+    const stocklistResult = await client.query(`
+      SELECT sh.stocksymbol, sh.numshares, sd.timestamp, sd.close
+      FROM Stocklistholdings slh
+      JOIN Stockholdings sh ON slh.stockholdingid = sh.stockholdingid
+      JOIN stockdata sd ON sd.code = sh.stocksymbol
+      WHERE slh.stocklistid = $1
+      ORDER BY sd.timestamp ASC
+    `, [stocklistId]);
+
+    const stocks = stocklistResult.rows;
+    if (stocks.length === 0) {
+      return res.status(404).send('Stocklist not found or empty');
+    }
+
+    const stocklistValues = {};
+    stocks.forEach(stock => {
+      const date = new Date(stock.timestamp).toISOString().split('T')[0];
+      if (!stocklistValues[date]) {
+        stocklistValues[date] = 0;
+      }
+      stocklistValues[date] += stock.numshares * stock.close;
+    });
+
+    const timestamps = Object.keys(stocklistValues).map(date => new Date(date).getTime());
+    const values = Object.values(stocklistValues);
+
+    const regression = new SimpleLinearRegression(timestamps, values);
+
+    const lastDate = new Date(timestamps[timestamps.length - 1]);
+    const predictions = [];
+    for (let i = 1; i <= 60; i++) { // 5 years of monthly predictions
+      const futureDate = new Date(lastDate.getFullYear(), lastDate.getMonth() + i, 1);
+      const futureTimestamp = futureDate.getTime();
+      const predictedValue = regression.predict(futureTimestamp);
+      predictions.push({
+        date: futureDate.toISOString().split('T')[0],
+        predictedValue: predictedValue
+      });
+    }
+
+    res.json(predictions);
+  } catch (err) {
+    console.error('Error fetching stocklist data:', err);
+    res.status(500).send('Error fetching stocklist data');
+  }
+});
+
+
 
   app.listen(port, () => {
     console.log(`Server is running on port ${port}`);

@@ -151,6 +151,66 @@
       let predictionChart;
 
       if (portfolioId) {
+        loadPortfolioData(portfolioId);
+
+        document.getElementById('add-cash-button').addEventListener('click', function() {
+          const cashAmountInput = document.getElementById('cash-amount');
+          const cashAmount = parseFloat(cashAmountInput.value);
+          if (!isNaN(cashAmount) && cashAmount > 0) {
+            fetch(`/api/portfolio/${portfolioId}/add-cash`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ amount: cashAmount })
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.newCashBalance !== undefined) {
+                document.getElementById('cash-balance').textContent = data.newCashBalance;
+                cashAmountInput.value = '';
+                loadPortfolioData(portfolioId);
+              } else {
+                alert('Error adding cash');
+              }
+            })
+            .catch(error => console.error('Error:', error));
+          } else {
+            alert('Please enter a valid amount');
+          }
+        });
+
+        document.getElementById('withdraw-cash-button').addEventListener('click', function() {
+          const cashAmountInput = document.getElementById('cash-amount');
+          const cashAmount = parseFloat(cashAmountInput.value);
+          if (!isNaN(cashAmount) && cashAmount > 0) {
+            fetch(`/api/portfolio/${portfolioId}/withdraw-cash`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ amount: cashAmount })
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.newCashBalance !== undefined) {
+                document.getElementById('cash-balance').textContent = data.newCashBalance;
+                cashAmountInput.value = '';
+                loadPortfolioData(portfolioId);
+              } else {
+                alert('Error withdrawing cash');
+              }
+            })
+            .catch(error => console.error('Error:', error));
+          } else {
+            alert('Please enter a valid amount');
+          }
+        });
+      } else {
+        console.error('No portfolio ID found in the URL.');
+      }
+
+      function loadPortfolioData(portfolioId) {
         fetch(`/api/portfolio/${portfolioId}`)
           .then(response => {
             if (!response.ok) {
@@ -175,7 +235,9 @@
                   })
                   .then(stockData => {
                     const stockTableBody = document.getElementById('stock-table').querySelector('tbody');
+                    stockTableBody.innerHTML = ''; // Clear existing rows
                     let totalValue = 0;
+
                     stockData.forEach(stock => {
                       const row = document.createElement('tr');
                       const stockSymbolCell = document.createElement('td');
@@ -225,12 +287,7 @@
                               numSharesCell.textContent = newNumShares;
                             }
                             numSharesToSellInput.value = '';
-                            const stockValueAfterSell = newNumShares * stock.close;
-                            totalValue = totalValue - stockValue + stockValueAfterSell;
-                            document.getElementById('portfolio-value').textContent = totalValue.toFixed(2);
-
-                            fetchPortfolioStats(portfolioId);
-                            fetchCovarianceMatrix(portfolioId);
+                            loadPortfolioData(portfolioId);
                           } else {
                             alert(`Error selling stock: ${data.message}`);
                           }
@@ -261,61 +318,7 @@
             }
           })
           .catch(error => console.error('Error fetching portfolio details:', error));
-      } else {
-        console.error('No portfolio ID found in the URL.');
       }
-
-      document.getElementById('add-cash-button').addEventListener('click', function() {
-        const cashAmountInput = document.getElementById('cash-amount');
-        const cashAmount = parseFloat(cashAmountInput.value);
-        if (!isNaN(cashAmount) && cashAmount > 0) {
-          fetch(`/api/portfolio/${portfolioId}/add-cash`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ amount: cashAmount })
-          })
-          .then(response => response.json())
-          .then(data => {
-            if (data.newCashBalance !== undefined) {
-              document.getElementById('cash-balance').textContent = data.newCashBalance;
-              cashAmountInput.value = '';
-            } else {
-              alert('Error adding cash');
-            }
-          })
-          .catch(error => console.error('Error:', error));
-        } else {
-          alert('Please enter a valid amount');
-        }
-      });
-
-      document.getElementById('withdraw-cash-button').addEventListener('click', function() {
-        const cashAmountInput = document.getElementById('cash-amount');
-        const cashAmount = parseFloat(cashAmountInput.value);
-        if (!isNaN(cCashAmount) && cashAmount > 0) {
-          fetch(`/api/portfolio/${portfolioId}/withdraw-cash`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ amount: cashAmount })
-          })
-          .then(response => response.json())
-          .then(data => {
-            if (data.newCashBalance !== undefined) {
-              document.getElementById('cash-balance').textContent = data.newCashBalance;
-              cashAmountInput.value = '';
-            } else {
-              alert('Error withdrawing cash');
-            }
-          })
-          .catch(error => console.error('Error:', error));
-        } else {
-          alert('Please enter a valid amount');
-        }
-      });
 
       function fetchPortfolioStats(portfolioId) {
         fetch(`/api/portfolio-stats/${portfolioId}`)
@@ -400,6 +403,9 @@
             const portfolioValues = months.map(month => portfolioHistory[month]);
 
             const ctx = document.getElementById('performance-chart').getContext('2d');
+            if (performanceChart) {
+              performanceChart.destroy();
+            }
             performanceChart = new Chart(ctx, {
               type: 'line',
               data: {
@@ -468,6 +474,9 @@
             const predictedValues = data.map(item => item.predictedValue);
 
             const ctx = document.getElementById('prediction-chart').getContext('2d');
+            if (predictionChart) {
+              predictionChart.destroy();
+            }
             predictionChart = new Chart(ctx, {
               type: 'line',
               data: {
@@ -490,10 +499,10 @@
                       displayFormats: {
                         month: 'MMM yyyy'
                       }
-                    },
-                    y: {
-                      beginAtZero: false
                     }
+                  },
+                  y: {
+                    beginAtZero: false
                   }
                 }
               }
