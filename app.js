@@ -23,10 +23,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
-    secret: "your-secret-key", // Replace with a strong secret key
+    secret: "your-secret-key",
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: false }, // Set to true if using HTTPS
+    cookie: { secure: false },
   })
 );
 
@@ -1031,14 +1031,13 @@ app.post('/api/add-stock-data', (req, res) => {
         return res.status(200).json({ error: 'You cannot send a friend request to yourself' });
       }
 
-      // Validate the request body
       if (!receiveemail) {
         return res.status(400).json({ error: 'receiveemail is required' });
       }
   
       const checkReciprocalQuery = `
         SELECT * FROM FriendRequests
-        WHERE requestemail = $1 AND receiveemail = $2 AND (status = 'Pending' OR )
+        WHERE requestemail = $1 AND receiveemail = $2 AND (status = 'Pending' OR status = 'Declined')
       `;
   
       client.query(checkReciprocalQuery, [receiveemail, senderemail], (err, result) => {
@@ -1046,7 +1045,6 @@ app.post('/api/add-stock-data', (req, res) => {
           console.error('Error checking reciprocal friend request:', err);
           res.status(500).send('Internal Server Error');
         } else if (result.rows.length > 0) {
-          // Reciprocal friend request exists
           const addFriendsQuery = `
             INSERT INTO Friends (email1, email2)
             VALUES ($1, $2)

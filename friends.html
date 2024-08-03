@@ -84,7 +84,6 @@
 
     <script>
       document.addEventListener("DOMContentLoaded", function () {
-        // Fetch session data for welcome message
         fetch("/api/session")
           .then((response) => response.json())
           .then((data) => {
@@ -95,13 +94,9 @@
             console.error("Error fetching session data:", error)
           );
 
-        // Fetch friends list
         fetchFriendsList();
-
-        // Fetch pending friend requests
         fetchPendingRequests();
 
-        // Add friend request functionality
         const friendRequestInput = document.getElementById('friend-request-input');
         const sendRequestButton = document.getElementById('send-request-button');
 
@@ -119,7 +114,7 @@
           .then((response) => response.json())
           .then((data) => {
             const friendsList = document.getElementById("friends-list");
-            friendsList.innerHTML = ""; // Clear any existing list items
+            friendsList.innerHTML = ""; 
             data.friends.forEach((friend) => {
               const listItem = document.createElement("li");
               listItem.textContent = `${friend.name} (${friend.friendemail})`;
@@ -153,7 +148,7 @@
             return;
           }
           alert('Friend request sent successfully');
-          fetchFriendsList(); // Reload friends list
+          fetchFriendsList(); 
           fetchPendingRequests();
         })
         .catch(error => console.error('Error sending friend request:', error));
