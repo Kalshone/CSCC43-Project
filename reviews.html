@@ -221,7 +221,10 @@
         .then((response) => {
           if (response.ok) {
             fetchReviews();
-          } 
+          } else {
+            console.error("Error updating review:", response.statusText);
+          }
+        })
         .catch((error) => console.error("Error updating review:", error));
     }
     </script>
