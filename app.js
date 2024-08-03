@@ -1234,6 +1234,62 @@ app.get('/api/compare-stocks/:stock1/:stock2', (req, res) => {
   });
 });
 
+// portfolio covariance matrix
+app.get('/api/portfolio/:id/covariance-matrix', async (req, res) => {
+  const portfolioId = parseInt(req.params.id, 10);
+
+  if (isNaN(portfolioId)) {
+    return res.status(400).send('Invalid portfolio ID');
+  }
+
+  const portfolioQuery = `
+    SELECT sh.stocksymbol, sd.close
+    FROM Stocklistholdings slh
+    JOIN Stockholdings sh ON slh.stockholdingid = sh.stockholdingid
+    JOIN stockdata sd ON sd.code = sh.stocksymbol
+    WHERE slh.stocklistid = (
+      SELECT stocklistid FROM Portfolios WHERE portfolioid = $1
+    )
+    ORDER BY sd.timestamp ASC;
+  `;
+
+  try {
+    const portfolioResult = await client.query(portfolioQuery, [portfolioId]);
+    const stocks = portfolioResult.rows;
+    if (stocks.length === 0) {
+      return res.status(404).send('Portfolio not found or empty');
+    }
+
+    const stockSymbols = [...new Set(stocks.map(stock => stock.stocksymbol))];
+    const stockPrices = stockSymbols.map(symbol =>
+      stocks.filter(stock => stock.stocksymbol === symbol).map(stock => parseFloat(stock.close))
+    );
+
+    const calculateCovariance = (arr1, arr2) => {
+      const mean1 = arr1.reduce((acc, val) => acc + val, 0) / arr1.length;
+      const mean2 = arr2.reduce((acc, val) => acc + val, 0) / arr2.length;
+      return arr1.reduce((acc, val, idx) => acc + ((val - mean1) * (arr2[idx] - mean2)), 0) / (arr1.length - 1);
+    };
+
+    const covarianceMatrix = {};
+    stockSymbols.forEach((symbol1, idx1) => {
+      covarianceMatrix[symbol1] = {};
+      stockSymbols.forEach((symbol2, idx2) => {
+        const cov = calculateCovariance(stockPrices[idx1], stockPrices[idx2]);
+        covarianceMatrix[symbol1][symbol2] = cov;
+        covarianceMatrix[symbol2] = covarianceMatrix[symbol2] || {};
+        covarianceMatrix[symbol2][symbol1] = cov;
+      });
+    });
+
+    res.json(covarianceMatrix);
+  } catch (err) {
+    console.error('Error fetching covariance matrix:', err);
+    res.status(500).send('Error fetching covariance matrix');
+  }
+});
+
+
   
   //logout
   app.get("/logout", (req, res) => {
