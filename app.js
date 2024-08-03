@@ -125,15 +125,15 @@ app.post('/add-portfolio', (req, res) => {
     const portfolioName = req.body.portfolioName;
     const cashbalance = 0;
     const createStocklistQuery = 'INSERT INTO Stocklists (email, name, isPublic) VALUES ($1, $2, $3) RETURNING stocklistid';
-    client.query(createStocklistQuery, [email, portfolioName, false], (err, result) => {
+    client.query(createStocklistQuery, [email, portfolioName, falfse], (err, result) => {
       if (err) {
         console.error('Error creating stocklist:', err);
         return res.status(500).send('Error creating stocklist');
       }
 
-      const stocklistId = result.rows[0].stocklistid;
-      const createPortfolioQuery = 'INSERT INTO Portfolios (email, stockListId, name, cashbalance) VALUES ($1, $2, $3, $4) RETURNING portfolioid';
-      client.query(createPortfolioQuery, [email, stocklistId, portfolioName, cashbalance], (err, result) => {
+      const stocklistid = result.rows[0].stocklistid;
+      const createPortfolioQuery = 'INSERT INTO Portfolios (email, stocklistid, name, cashbalance) VALUES ($1, $2, $3, $4) RETURNING portfolioid';
+      client.query(createPortfolioQuery, [email, stocklistid, portfolioName, cashbalance], (err, result) => {
         if (err) {
           console.error('Error creating portfolio:', err);
           return res.status(500).send('Error creating portfolio');
@@ -422,12 +422,13 @@ app.post('/api/sell-stock', (req, res) => {
   });
 });
 
-
-
-
   // stocklist page
-    app.get("/stocklist-page", (req, res) => {
+  app.get("/stocklist-page", (req, res) => {
+    if (req.session.user) {
       res.sendFile(__dirname + '/stocklist-page.html');
+    } else {
+      res.redirect('/');
+    }
   });
 
   // add stocklist page
@@ -458,13 +459,13 @@ app.post('/add-stocklist', (req, res) => {
 
 // update stocklist visibility
 app.put('/api/stocklist/:id/visibility', (req, res) => {
-  const stocklistId = parseInt(req.params.id, 10);
+  const stocklistid = parseInt(req.params.id, 10);
   const { isPublic } = req.body;
-  if (isNaN(stocklistId)) {
+  if (isNaN(stocklistid)) {
     return res.status(400).send('Invalid stocklist ID');
   }
   const query = 'UPDATE Stocklists SET isPublic = $1 WHERE stocklistid = $2';
-  client.query(query, [isPublic, stocklistId], (err, result) => {
+  client.query(query, [isPublic, stocklistid], (err, result) => {
     if (err) {
       console.error('Error executing query', err);
       res.status(500).send('Error updating stocklist visibility');
@@ -478,9 +479,9 @@ app.put('/api/stocklist/:id/visibility', (req, res) => {
 
 // fetch stocks in stocklist and most recent close price
 app.get('/api/stocklist/:id/stocks', (req, res) => {
-  const stocklistId = parseInt(req.params.id, 10);
+  const stocklistid = parseInt(req.params.id, 10);
 
-  if (isNaN(stocklistId)) {
+  if (isNaN(stocklistid)) {
     return res.status(400).send('Invalid stocklist ID');
   }
 
@@ -498,7 +499,7 @@ app.get('/api/stocklist/:id/stocks', (req, res) => {
     WHERE slh.stocklistid = $1;
   `;
 
-  client.query(query, [stocklistId], (err, result) => {
+  client.query(query, [stocklistid], (err, result) => {
     if (err) {
       console.error('Error fetching stocklist stocks:', err);
       res.status(500).send('Error fetching stocklist stocks');
@@ -511,7 +512,7 @@ app.get('/api/stocklist/:id/stocks', (req, res) => {
 
 // add stocks to stocklist (create stockholding if not exists)
 app.post('/api/add-to-stocklist', (req, res) => {
-  const { stockSymbol, numShares, stocklistId } = req.body;
+  const { stockSymbol, numShares, stocklistid } = req.body;
 
   const checkStockholdingQuery = 'SELECT stockholdingid FROM Stockholdings WHERE stocksymbol = $1 AND numshares = $2';
   client.query(checkStockholdingQuery, [stockSymbol, numShares], (err, result) => {
@@ -524,7 +525,7 @@ app.post('/api/add-to-stocklist', (req, res) => {
       const stockholdingId = result.rows[0].stockholdingid;
 
       const checkStocklistHoldingQuery = 'SELECT * FROM Stocklistholdings WHERE stocklistid = $1 AND stockholdingid = $2';
-      client.query(checkStocklistHoldingQuery, [stocklistId, stockholdingId], (err, result) => {
+      client.query(checkStocklistHoldingQuery, [stocklistid, stockholdingId], (err, result) => {
         if (err) {
           console.error('Error checking stocklistholding:', err);
           return res.status(500).send({ success: false, message: 'Error checking stocklistholding' });
@@ -535,7 +536,7 @@ app.post('/api/add-to-stocklist', (req, res) => {
         } else {
           
           const addStocklistHoldingQuery = 'INSERT INTO Stocklistholdings (stocklistid, stockholdingid) VALUES ($1, $2)';
-          client.query(addStocklistHoldingQuery, [stocklistId, stockholdingId], (err, result) => {
+          client.query(addStocklistHoldingQuery, [stocklistid, stockholdingId], (err, result) => {
             if (err) {
               console.error('Error adding stockholding to stocklist:', err);
               return res.status(500).send({ success: false, message: 'Error adding stockholding to stocklist' });
@@ -556,7 +557,7 @@ app.post('/api/add-to-stocklist', (req, res) => {
 
         const stockholdingId = result.rows[0].stockholdingid;
         const addStocklistHoldingQuery = 'INSERT INTO Stocklistholdings (stocklistid, stockholdingid) VALUES ($1, $2)';
-        client.query(addStocklistHoldingQuery, [stocklistId, stockholdingId], (err, result) => {
+        client.query(addStocklistHoldingQuery, [stocklistid, stockholdingId], (err, result) => {
           if (err) {
             console.error('Error adding stockholding to stocklist:', err);
             return res.status(500).send({ success: false, message: 'Error adding stockholding to stocklist' });
@@ -590,14 +591,14 @@ app.post('/api/add-to-stocklist', (req, res) => {
 
   // fetch stocklist details by id
   app.get('/api/stocklist/:id', (req, res) => {
-    const stocklistId = parseInt(req.params.id, 10);
+    const stocklistid = parseInt(req.params.id, 10);
 
-    if (isNaN(stocklistId)) {
+    if (isNaN(stocklistid)) {
       return res.status(400).send('Invalid stocklist ID');
     }
 
   const query = 'SELECT stocklistid, name, email AS owner, isPublic FROM Stocklists WHERE stocklistid = $1';
-  client.query(query, [stocklistId], (err, result) => {
+  client.query(query, [stocklistid], (err, result) => {
     if (err) {
       console.error('Error executing query', err);
       res.status(500).send('Error fetching stocklist details');
@@ -642,11 +643,11 @@ app.get('/api/public-stocklists', (req, res) => {
     if (req.session.user) {
       const email = req.session.user.email;
       const query = `
-        SELECT Reviews.reviewID, Reviews.reviewText, Users.name 
-        FROM Reviews 
-        JOIN StockLists ON Reviews.stockListID = StockLists.stockListID 
+        SELECT r.reviewID, r.reviewText, r.stocklistid, Users.name 
+        FROM Reviews r
+        JOIN StockLists ON r.stocklistid = StockLists.stocklistid 
         JOIN Users ON StockLists.email = Users.email 
-        WHERE Reviews.email = $1
+        WHERE r.email = $1
       `;
       client.query(query, [email], (err, result) => {
         if (err) {
@@ -721,15 +722,15 @@ app.get('/api/public-stocklists', (req, res) => {
 
   app.post("/api/request-review", (req, res) => {
     if (req.session.user) {
-      const { email, stockListId, reviewText } = req.body;
+      const { email, stocklistid, reviewText } = req.body;
   
       const query = `
-        INSERT INTO Reviews (email, stockListID, reviewText)
+        INSERT INTO Reviews (email, stocklistid, reviewText)
         VALUES ($1, $2, $3)
         RETURNING *
       `;
   
-      client.query(query, [email, stockListId, reviewText], (err, result) => {
+      client.query(query, [email, stocklistid, reviewText], (err, result) => {
         if (err) {
           console.error("Error executing query", err);
           res.status(500).send("Error requesting review");
@@ -742,25 +743,56 @@ app.get('/api/public-stocklists', (req, res) => {
     }
   });
 
-  app.get("/api/reviews/", (req, res) => {
-    const stockListId = req.query.stockListId;
+  // app.get("/api/reviews/", (req, res) => {
+  //   const stocklistid = req.query.stocklistid;
   
-    const query = `
-      SELECT Reviews.reviewID, Reviews.reviewText, Users.name
-      FROM Reviews
-      JOIN Users ON Reviews.email = Users.email
-      WHERE Reviews.stockListID = $1
-    `;
+  //   const query = `
+  //     SELECT Reviews.reviewID, Reviews.reviewText, Users.name
+  //     FROM Reviews
+  //     JOIN Users ON Reviews.email = Users.email
+  //     WHERE Reviews.stocklistid = $1
+  //   `;
   
-    client.query(query, [stockListId], (err, result) => {
-      if (err) {
-        console.error("Error executing query", err);
-        res.status(500).send("Error fetching reviews");
-      } else {
-        res.json(result.rows);
-      }
-    });
+  //   client.query(query, [stocklistid], (err, result) => {
+  //     if (err) {
+  //       console.error("Error executing query", err);
+  //       res.status(500).send("Error fetching reviews");
+  //     } else {
+  //       res.json(result.rows);
+  //     }
+  //   });
+  // });
+  
+  app.post("/api/stocklist-reviews", (req, res) => {
+    if (req.session.user) {
+      // const email = req.session.user.email;
+      const { stocklistid } = req.body;
+      console.log("stocklistid is", stocklistid);
+  
+      const query = `
+        SELECT r.reviewtext, u.name AS name
+        FROM Reviews r
+        JOIN Users u ON r.email = u.email
+        WHERE r.stocklistid = $1;
+      `;
+  
+      client.query(query, [stocklistid], (err, results) => {
+        // console.log(results.rows);
+        if (err) {
+          console.error("Error fetching stocklist reviews:", err);
+          res.status(500).send("Internal Server Error");
+        } else {
+          res.json({
+            reviews: results.rows,
+          });
+        }
+      });
+    } else {
+      res.status(401).send("Unauthorized");
+    }
   });
+
+
 
   //see stocks
   app.get("/stocks", (req, res) => {
@@ -822,8 +854,6 @@ app.post('/api/add-stock-data', (req, res) => {
     }
   });
 });
-
-
 
   app.get("/friends", (req, res) => {
     if (req.session.user) {
@@ -915,7 +945,7 @@ app.post('/api/add-stock-data', (req, res) => {
   
       const checkReciprocalQuery = `
         SELECT * FROM FriendRequests
-        WHERE requestemail = $1 AND receiveemail = $2 AND (status = 'Pending' OR status = 'declined')
+        WHERE requestemail = $1 AND receiveemail = $2 AND (status = 'Pending' OR )
       `;
   
       client.query(checkReciprocalQuery, [receiveemail, senderemail], (err, result) => {

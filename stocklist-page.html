@@ -26,6 +26,9 @@
     .stock-table th {
       background-color: #f4f4f4;
     }
+    a {
+      color: #4CAF50;
+    }
   </style>
 </head>
 <body>
@@ -51,14 +54,14 @@
     </tbody>
   </table>
 
-  <div class="section form-section">
+  <div class="section form-section" style="display: none;">
     <h2>Request a Review on this Stocklist</h2>
     <form action="/request-review" method="post">
       <input type="email" 
       name="userEmail" 
       placeholder="User's Email" 
       required id="review-request-input" />
-      <input type="hidden" name="stockListId" id="stocklist-id-input" />
+      <input type="hidden" name="stocklistid" id="stocklist-id-input" />
       <button type="button" id="request-review-button">Request Review</button>
     </form>
   </div>  
@@ -68,14 +71,19 @@
     <ul id="stocklist-reviews">
       <!-- List of reviews on this stocklist will be added here -->
     </ul>
+  </div>
+
+  <a href="/dashboard">Back to Dashboard</a>
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const urlParams = new URLSearchParams(window.location.search);
-      const stocklistId = urlParams.get('id');
+      const stocklistid = urlParams.get('id');
 
-      if (stocklistId) {
-        fetch(`/api/stocklist/${stocklistId}`)
+      fetchStocklistReviews(stocklistid);
+
+      if (stocklistid) {
+        fetch(`/api/stocklist/${stocklistid}`)
           .then(response => {
             if (!response.ok) {
               throw new Error('Network response was not ok');
@@ -87,9 +95,13 @@
               document.getElementById('stocklist-name').textContent = data.name || 'Unnamed Stocklist';
               document.getElementById('stocklist-name-detail').textContent = data.name || 'N/A';
               if (data.ispublic) {
-                document.getElementById('public').checked = true;
+                  document.getElementById('public').checked = true;
               } else {
-                document.getElementById('private').checked = true;
+                  document.getElementById('private').checked = true;
+                  const formSections = document.getElementsByClassName('form-section');
+                  for (let i = 0; i < formSections.length; i++) {
+                      formSections[i].style.display = 'block';
+                  }
               }
               fetch('/api/session')
                 .then(response => response.json())
@@ -100,7 +112,7 @@
                     document.querySelectorAll('input[name="visibility"]').forEach(radio => {
                       radio.addEventListener('change', function() {
                         const selectedVisibility = this.value === 'Public';
-                        fetch(`/api/stocklist/${stocklistId}/visibility`, {
+                        fetch(`/api/stocklist/${stocklistid}/visibility`, {
                           method: 'PUT',
                           headers: {
                             'Content-Type': 'application/json'
@@ -122,7 +134,7 @@
                   }
                 })
                 .catch(error => console.error('Error fetching session data:', error));
-              fetch(`/api/stocklist/${stocklistId}/stocks`)
+              fetch(`/api/stocklist/${stocklistid}/stocks`)
                 .then(response => {
                   if (!response.ok) {
                     throw new Error('Network response was not ok');
@@ -159,17 +171,17 @@
             }
 
 
-            fetch(`/api/reviews?stockListID=${stocklistID}`)
-              .then(response => response.json())
-              .then(reviews => {
-                const reviewsList = document.getElementById('stocklist-reviews');
-                reviews.forEach(review => {
-                  const li = document.createElement('li');
-                  li.textContent = `${review.email}: ${review.reviewText}`;
-                  reviewsList.appendChild(li);
-                });
-              })
-              .catch(error => console.error('Error fetching reviews:', error));
+            // fetch(`/api/reviews?stocklistid=${stocklistid}`)
+            //   .then(response => response.json())
+            //   .then(reviews => {
+            //     const reviewsList = document.getElementById('stocklist-reviews');
+            //     reviews.forEach(review => {
+            //       const li = document.createElement('li');
+            //       li.textContent = `${review.email}: ${review.reviewText}`;
+            //       reviewsList.appendChild(li);
+            //     });
+            //   })
+            //   .catch(error => console.error('Error fetching reviews:', error));
           })
           .catch(error => console.error('Error fetching stocklist details:', error));
 
@@ -184,7 +196,7 @@
             const email = reviewRequestInput.value.trim();
             if (email) {
               console.log('Sending review request to:', email);
-              sendReviewRequest(email, stocklistId);
+              sendReviewRequest(email, stocklistid);
               reviewRequestInput.value = '';
             }
           });
@@ -194,13 +206,13 @@
     });
 
 
-    function sendReviewRequest(email, stocklistId) {
+    function sendReviewRequest(email, stocklistid) {
         fetch('/api/request-review', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ email: email, stockListId: stocklistId, reviewText: "" })
+          body: JSON.stringify({ email: email, stocklistid: stocklistid, reviewText: "" })
         })
         .then(response => response.json())
         .then(data => {
@@ -208,6 +220,41 @@
           alert('Review request sent successfully');
         })
         .catch(error => console.error('Error sending review request:', error));
+      }
+
+      function fetchStocklistReviews(stocklistid) {
+        fetch("/api/stocklist-reviews", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ stocklistid: stocklistid }),
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            const reviewsList = document.getElementById("stocklist-reviews");
+            reviewsList.innerHTML = ""; // Clear any existing list items
+
+            if (data.reviews.length === 0) {
+              reviewsList.textContent = "No reviews found for this stocklist.";
+            } else {
+              data.reviews.forEach((review) => {
+                const listItem = document.createElement("li");
+                if (review.reviewtext !== "") {
+                  listItem.textContent = `Review from ${review.name}: "${review.reviewtext}"`;
+                  reviewsList.appendChild(listItem);
+                  console.log("Review: " + review.reviewtext);
+                } else {
+                  listItem.textContent = `Review from ${review.name}: Pending...`;
+                  reviewsList.appendChild(listItem);
+                  console.log("Review: Pending...");
+                }
+              });
+            }
+          })
+          .catch((error) =>
+            console.error("Error fetching stocklist reviews:", error)
+          );
       }
   </script>
 </body>

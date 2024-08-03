@@ -124,7 +124,13 @@
             data.forEach((review) => {
               const listItem = document.createElement("li");
               if (review.reviewtext !== "") {
-                listItem.textContent = `Review for ${review.name}: "${review.reviewtext}"`;
+                const stocklistLink = document.createElement("a");
+                stocklistLink.href = `/stocklist-page?id=${review.stocklistid}`;
+                stocklistLink.textContent = "link";
+
+                listItem.textContent = `Review for ${review.name} on `;
+                listItem.appendChild(stocklistLink);
+                listItem.appendChild(document.createTextNode(`: "${review.reviewtext}"`));
 
                 const buttonContainer = document.createElement('div');
                 buttonContainer.classList.add('editing-buttons');
@@ -151,7 +157,14 @@
             data.forEach((review) => {
               const listItem = document.createElement("li");
               if (review.reviewtext === "") {
-                listItem.textContent = `Review for ${review.name}: Pending...`;
+                const stocklistLink = document.createElement("a");
+                stocklistLink.href = `/stocklist-page?id=${review.stocklistid}`;
+                stocklistLink.textContent = "link";
+
+                listItem.textContent = `Review for ${review.name} on `;
+                listItem.appendChild(stocklistLink);
+                listItem.appendChild(document.createTextNode(`: "Pending..."`));
+
                 const buttonContainer = document.createElement('div');
                 buttonContainer.classList.add('editing-buttons');
 
