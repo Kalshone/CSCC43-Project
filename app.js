@@ -770,20 +770,50 @@ app.get('/api/public-stocklists', (req, res) => {
       const { stocklistid, reviewtext } = req.body;
       console.log("stocklistid is", stocklistid);
       console.log("reviewtext is", reviewtext);
-
   
-      const query = `
-        INSERT INTO Reviews (email, stocklistid, reviewtext)
-        VALUES ($1, $2, $3)
-        RETURNING *;
+      // First, check if there is a pending review
+      const checkQuery = `
+        SELECT * FROM Reviews
+        WHERE email = $1 AND stocklistid = $2 AND reviewtext = '';
       `;
   
-      client.query(query, [email, stocklistid, reviewtext], (err, result) => {
+      client.query(checkQuery, [email, stocklistid], (err, result) => {
         if (err) {
           console.error("Error executing query", err);
-          res.status(500).send("Error adding review");
+          res.status(500).send("Error checking for pending review");
+        } else if (result.rows.length > 0) {
+          // If a pending review exists, update it
+          const updateQuery = `
+            UPDATE Reviews
+            SET reviewtext = $3
+            WHERE email = $1 AND stocklistid = $2 AND reviewtext = ''
+            RETURNING *;
+          `;
+  
+          client.query(updateQuery, [email, stocklistid, reviewtext], (err, result) => {
+            if (err) {
+              console.error("Error executing query", err);
+              res.status(500).send("Error updating review");
+            } else {
+              res.json(result.rows[0]);
+            }
+          });
         } else {
-          res.json(result.rows[0]);
+          // If no pending review exists, insert a new review
+          const insertQuery = `
+            INSERT INTO Reviews (email, stocklistid, reviewtext)
+            VALUES ($1, $2, $3)
+            RETURNING *;
+          `;
+  
+          client.query(insertQuery, [email, stocklistid, reviewtext], (err, result) => {
+            if (err) {
+              console.error("Error executing query", err);
+              res.status(500).send("Error adding review");
+            } else {
+              res.json(result.rows[0]);
+            }
+          });
         }
       });
     } else {
