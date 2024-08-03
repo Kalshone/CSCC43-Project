@@ -84,7 +84,6 @@
 
     <script>
       document.addEventListener("DOMContentLoaded", function () {
-        // Fetch session data for welcome message
         fetch("/api/session")
           .then((response) => response.json())
           .then((data) => {
@@ -95,13 +94,9 @@
             console.error("Error fetching session data:", error)
           );
 
-        // Fetch friends list
         fetchFriendsList();
-
-        // Fetch pending friend requests
         fetchPendingRequests();
 
-        // Add friend request functionality
         const friendRequestInput = document.getElementById('friend-request-input');
         const sendRequestButton = document.getElementById('send-request-button');
 
@@ -119,10 +114,17 @@
           .then((response) => response.json())
           .then((data) => {
             const friendsList = document.getElementById("friends-list");
-            friendsList.innerHTML = ""; // Clear any existing list items
+            friendsList.innerHTML = ""; 
             data.friends.forEach((friend) => {
               const listItem = document.createElement("li");
               listItem.textContent = `${friend.name} (${friend.friendemail})`;
+              
+              const deleteButton = document.createElement('button');
+              deleteButton.textContent = 'Delete';
+              deleteButton.onclick = () => deleteFriend(friend.friendemail);
+
+              listItem.appendChild(deleteButton);
+
               friendsList.appendChild(listItem);
             });
           })
@@ -141,8 +143,12 @@
         })
         .then(response => response.json())
         .then(data => {
-          console.log('Friend request sent:', data);
-          fetchFriendsList(); // Reload friends list
+          if (data.error) {
+            alert(data.error);
+            return;
+          }
+          alert('Friend request sent successfully');
+          fetchFriendsList(); 
           fetchPendingRequests();
         })
         .catch(error => console.error('Error sending friend request:', error));
@@ -192,7 +198,6 @@
         })
         .then(response => response.json())
         .then(data => {
-          console.log('Friend request accepted:', data);
           fetchPendingRequests();
           fetchFriendsList();
         })
@@ -209,10 +214,24 @@
         })
         .then(response => response.json())
         .then(data => {
-          console.log('Friend request declined:', data);
           fetchPendingRequests();
         })
         .catch(error => console.error('Error declining friend request:', error));
+      }
+
+      function deleteFriend(friendEmail) {
+        fetch('/api/delete-friend', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ friendEmail })
+        })
+        .then(response => response.json())
+        .then(data => {
+          fetchFriendsList();
+        })
+        .catch(error => console.error('Error deleting friend:', error));
       }
     </script>
   </body>

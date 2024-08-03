@@ -66,7 +66,7 @@
             .then(response => response.json())
             .then(portfolios => {
               const portfolioList = document.getElementById('portfolio-list');
-              const portfolioStocklistIds = portfolios.map(portfolio => portfolio.stocklistid);
+              const portfoliostocklistids = portfolios.map(portfolio => portfolio.stocklistid);
 
               portfolios.forEach(portfolio => {
                 const li = document.createElement('li');
@@ -81,7 +81,7 @@
                 .then(response => response.json())
                 .then(stocklists => {
                   const stocklistList = document.getElementById('stocklist-list');
-                  const filteredStocklists = stocklists.filter(stocklist => !portfolioStocklistIds.includes(stocklist.stocklistid));
+                  const filteredStocklists = stocklists.filter(stocklist => !portfoliostocklistids.includes(stocklist.stocklistid));
                   
                   filteredStocklists.forEach(stocklist => {
                     const li = document.createElement('li');

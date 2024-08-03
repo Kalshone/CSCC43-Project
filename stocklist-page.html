@@ -26,6 +26,9 @@
     .stock-table th, .performance-table th, .prediction-table th {
       background-color: #f4f4f4;
     }
+    a {
+      color: #4CAF50;
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
@@ -52,6 +55,33 @@
     <tbody>
     </tbody>
   </table>
+
+  <div class="section form-section" style="display: none;">
+    <h2>Request a Review on this Stocklist</h2>
+    <form action="/request-review" method="post">
+      <input type="email" 
+      name="userEmail" 
+      placeholder="User's Email" 
+      required id="review-request-input" />
+      <input type="hidden" name="stocklistid" id="stocklist-id-input" />
+      <button type="button" id="request-review-button">Request Review</button>
+    </form>
+  </div>  
+
+  <div class="section reviews" style="display: block;">
+    <h2>Reviews on this Stocklist</h2>
+    <ul id="stocklist-reviews"></ul>
+  </div>
+
+  <div class="section add-review" style="display: none;">
+    <h2>Add a review</h2>
+    <button type="button" id="add-review-button">Add Review</button>
+    <form id="add-review-form" style="display: none;">
+      <label for="review-text">Review:</label>
+      <textarea id="review-text" name="review-text" required></textarea>
+      <button type="submit">Submit</button>
+    </form>
+  </div>
 
   <h2>Stocklist Performance Over Time</h2>
   <canvas id="performance-chart"></canvas>
@@ -81,14 +111,56 @@
     <tbody id="prediction-body"></tbody>
   </table>
 
+  <a href="/dashboard">Back to Dashboard</a>
+
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const urlParams = new URLSearchParams(window.location.search);
-      const stocklistId = urlParams.get('id');
+      const stocklistid = urlParams.get('id');
       let performanceChart, predictionChart;
 
-      if (stocklistId) {
-        fetch(`/api/stocklist/${stocklistId}`)
+      fetchStocklistReviews(stocklistid);
+
+      const addReviewButton = document.getElementById("add-review-button");
+      const addReviewForm = document.getElementById("add-review-form");
+
+      addReviewButton.addEventListener("click", () => {
+        addReviewForm.style.display = "block";
+      });
+
+      addReviewForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const reviewtext = document.getElementById("review-text").value;
+
+        // Assuming you have an API endpoint to handle the review submission
+        fetch("/api/add-review", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ stocklistid, reviewtext })
+        })
+        .then(response => {
+          if (!response.ok) { // Check if the response status is not OK (200-299)
+            return response.json().then(data => {
+              throw new Error(data.error); // Throw an error with the error message
+            });
+          }
+          return response.json();
+        })
+        .then(data => {
+          alert("Review added successfully!"); // Display success message only if there is no error
+          addReviewForm.reset();
+          addReviewForm.style.display = "none";
+          fetchStocklistReviews(stocklistid);
+        })
+        .catch(err => {
+          alert(err.message); // Alert the error message
+        });
+      });
+
+      if (stocklistid) {
+        fetch(`/api/stocklist/${stocklistid}`)
           .then(response => {
             if (!response.ok) {
               throw new Error('Network response was not ok');
@@ -100,9 +172,46 @@
               document.getElementById('stocklist-name').textContent = data.name || 'Unnamed Stocklist';
               document.getElementById('stocklist-name-detail').textContent = data.name || 'N/A';
               if (data.ispublic) {
-                document.getElementById('public').checked = true;
+                  document.getElementById('public').checked = true;
+                  fetch('/api/session')
+                    .then(response => response.json())
+                    .then(sessionData => {
+                      if (sessionData.user.email == data.owner) {
+                        const requestReviewSections = document.getElementsByClassName('form-section');
+                        for (let i = 0; i < requestReviewSections.length; i++) {
+                          requestReviewSections[i].style.display = 'block';
+                        }
+                      } else {
+                        const formSections = document.getElementsByClassName('add-review');
+                        for (let i = 0; i < formSections.length; i++) {
+                            formSections[i].style.display = 'block';
+                        }
+                      }
+                    })
+                    .catch(error => console.error('Error fetching session data:', error));
               } else {
-                document.getElementById('private').checked = true;
+                  document.getElementById('private').checked = true;
+                  // if the user is not the owner of the stocklist, set the dispaly of section reviews to none:
+                  fetch('/api/session')
+                    .then(response => response.json())
+                    .then(sessionData => {
+                      if (sessionData.user.email !== data.owner) {
+                        const reviewsSection = document.getElementsByClassName('reviews');
+                        for (let i = 0; i < reviewsSection.length; i++) {
+                            reviewsSection[i].style.display = 'none';
+                        }
+                        const formSections = document.getElementsByClassName('add-review');
+                        for (let i = 0; i < formSections.length; i++) {
+                            formSections[i].style.display = 'block';
+                        }
+                      } else {
+                        const requestReviewSections = document.getElementsByClassName('form-section');
+                        for (let i = 0; i < requestReviewSections.length; i++) {
+                          requestReviewSections[i].style.display = 'block';
+                        }
+                      }
+                    })
+                    .catch(error => console.error('Error fetching session data:', error));
               }
               fetch('/api/session')
                 .then(response => response.json())
@@ -113,7 +222,7 @@
                     document.querySelectorAll('input[name="visibility"]').forEach(radio => {
                       radio.addEventListener('change', function() {
                         const selectedVisibility = this.value === 'Public';
-                        fetch(`/api/stocklist/${stocklistId}/visibility`, {
+                        fetch(`/api/stocklist/${stocklistid}/visibility`, {
                           method: 'PUT',
                           headers: {
                             'Content-Type': 'application/json'
@@ -126,16 +235,13 @@
                           }
                           return response.json();
                         })
-                        .then(updateData => {
-                          console.log('Visibility updated successfully:', updateData);
-                        })
                         .catch(error => console.error('Error updating visibility:', error));
                       });
                     });
                   }
                 })
                 .catch(error => console.error('Error fetching session data:', error));
-              fetch(`/api/stocklist/${stocklistId}/stocks`)
+              fetch(`/api/stocklist/${stocklistid}/stocks`)
                 .then(response => {
                   if (!response.ok) {
                     throw new Error('Network response was not ok');
@@ -166,20 +272,49 @@
 
                   document.getElementById('stocklist-value').textContent = totalValue.toFixed(2);
 
-                  fetchPerformanceData(stocklistId, stockData);
-                  fetchPredictionData(stocklistId);
+                  fetchPerformanceData(stocklistid, stockData);
+                  fetchPredictionData(stocklistid);
                 })
                 .catch(error => console.error('Error fetching stock data:', error));
             } else {
               console.error('No data returned for stocklist details.');
             }
+
+
+            // fetch(`/api/reviews?stocklistid=${stocklistid}`)
+            //   .then(response => response.json())
+            //   .then(reviews => {
+            //     const reviewsList = document.getElementById('stocklist-reviews');
+            //     reviews.forEach(review => {
+            //       const li = document.createElement('li');
+            //       li.textContent = `${review.email}: ${review.reviewText}`;
+            //       reviewsList.appendChild(li);
+            //     });
+            //   })
+            //   .catch(error => console.error('Error fetching reviews:', error));
           })
           .catch(error => console.error('Error fetching stocklist details:', error));
+
+          
+
+
+          // Add friend request functionality
+          const reviewRequestInput = document.getElementById('review-request-input');
+          const sendRequestButton = document.getElementById('request-review-button');
+
+          sendRequestButton.addEventListener('click', () => {
+            const email = reviewRequestInput.value.trim();
+            if (email) {
+              sendReviewRequest(email, stocklistid);
+              reviewRequestInput.value = '';
+            }
+          });
       } else {
         console.error('No stocklist ID found in the URL.');
       }
+    });
 
-      function fetchPerformanceData(stocklistId, stockData) {
+      function fetchPerformanceData(stocklistid, stockData) {
         const performanceTableBody = document.querySelector('.performance-table tbody');
         performanceTableBody.innerHTML = '';
 
@@ -270,8 +405,8 @@
         }, {});
       }
 
-      function fetchPredictionData(stocklistId) {
-        fetch(`/api/predicted-stocklist/${stocklistId}`)
+      function fetchPredictionData(stocklistid) {
+        fetch(`/api/predicted-stocklist/${stocklistid}`)
           .then(response => {
             if (!response.ok) {
               throw new Error('Network response was not ok');
@@ -330,7 +465,55 @@
           })
           .catch(error => console.error('Error fetching prediction data:', error));
       }
-    });
+
+
+    function sendReviewRequest(email, stocklistid) {
+        fetch('/api/request-review', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ email: email, stocklistid: stocklistid, reviewText: "" })
+        })
+        .then(response => response.json())
+        .then(data => {
+          alert('Review request sent successfully');
+        })
+        .catch(error => console.error('Error sending review request:', error));
+      }
+
+      function fetchStocklistReviews(stocklistid) {
+        fetch("/api/stocklist-reviews", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ stocklistid: stocklistid }),
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            const reviewsList = document.getElementById("stocklist-reviews");
+            reviewsList.innerHTML = ""; // Clear any existing list items
+
+            if (data.reviews.length === 0) {
+              reviewsList.textContent = "No reviews found for this stocklist.";
+            } else {
+              data.reviews.forEach((review) => {
+                const listItem = document.createElement("li");
+                if (review.reviewtext !== "") {
+                  listItem.textContent = `Review from ${review.name}: "${review.reviewtext}"`;
+                  reviewsList.appendChild(listItem);
+                } else {
+                  listItem.textContent = `Review from ${review.name}: Pending...`;
+                  reviewsList.appendChild(listItem);
+                }
+              });
+            }
+          })
+          .catch((error) =>
+            console.error("Error fetching stocklist reviews:", error)
+          );
+      }
   </script>
 </body>
 </html>

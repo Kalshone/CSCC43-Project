@@ -23,10 +23,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
-    secret: "your-secret-key", // Replace with a strong secret key
+    secret: "your-secret-key",
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: false }, // Set to true if using HTTPS
+    cookie: { secure: false },
   })
 );
 
@@ -129,15 +129,15 @@ app.post('/add-portfolio', (req, res) => {
     const portfolioName = req.body.portfolioName;
     const cashbalance = 0;
     const createStocklistQuery = 'INSERT INTO Stocklists (email, name, isPublic) VALUES ($1, $2, $3) RETURNING stocklistid';
-    client.query(createStocklistQuery, [email, portfolioName, false], (err, result) => {
+    client.query(createStocklistQuery, [email, portfolioName, falfse], (err, result) => {
       if (err) {
         console.error('Error creating stocklist:', err);
         return res.status(500).send('Error creating stocklist');
       }
 
-      const stocklistId = result.rows[0].stocklistid;
-      const createPortfolioQuery = 'INSERT INTO Portfolios (email, stockListId, name, cashbalance) VALUES ($1, $2, $3, $4) RETURNING portfolioid';
-      client.query(createPortfolioQuery, [email, stocklistId, portfolioName, cashbalance], (err, result) => {
+      const stocklistid = result.rows[0].stocklistid;
+      const createPortfolioQuery = 'INSERT INTO Portfolios (email, stocklistid, name, cashbalance) VALUES ($1, $2, $3, $4) RETURNING portfolioid';
+      client.query(createPortfolioQuery, [email, stocklistid, portfolioName, cashbalance], (err, result) => {
         if (err) {
           console.error('Error creating portfolio:', err);
           return res.status(500).send('Error creating portfolio');
@@ -450,8 +450,12 @@ app.post('/api/sell-stock', (req, res) => {
 
 
   // stocklist page
-    app.get("/stocklist-page", (req, res) => {
+  app.get("/stocklist-page", (req, res) => {
+    if (req.session.user) {
       res.sendFile(__dirname + '/stocklist-page.html');
+    } else {
+      res.redirect('/');
+    }
   });
 
   // add stocklist page
@@ -482,13 +486,13 @@ app.post('/add-stocklist', (req, res) => {
 
 // update stocklist visibility
 app.put('/api/stocklist/:id/visibility', (req, res) => {
-  const stocklistId = parseInt(req.params.id, 10);
+  const stocklistid = parseInt(req.params.id, 10);
   const { isPublic } = req.body;
-  if (isNaN(stocklistId)) {
+  if (isNaN(stocklistid)) {
     return res.status(400).send('Invalid stocklist ID');
   }
   const query = 'UPDATE Stocklists SET isPublic = $1 WHERE stocklistid = $2';
-  client.query(query, [isPublic, stocklistId], (err, result) => {
+  client.query(query, [isPublic, stocklistid], (err, result) => {
     if (err) {
       console.error('Error executing query', err);
       res.status(500).send('Error updating stocklist visibility');
@@ -502,9 +506,9 @@ app.put('/api/stocklist/:id/visibility', (req, res) => {
 
 // fetch stocks in stocklist and most recent close price
 app.get('/api/stocklist/:id/stocks', (req, res) => {
-  const stocklistId = parseInt(req.params.id, 10);
+  const stocklistid = parseInt(req.params.id, 10);
 
-  if (isNaN(stocklistId)) {
+  if (isNaN(stocklistid)) {
     return res.status(400).send('Invalid stocklist ID');
   }
 
@@ -522,7 +526,7 @@ app.get('/api/stocklist/:id/stocks', (req, res) => {
     WHERE slh.stocklistid = $1;
   `;
 
-  client.query(query, [stocklistId], (err, result) => {
+  client.query(query, [stocklistid], (err, result) => {
     if (err) {
       console.error('Error fetching stocklist stocks:', err);
       res.status(500).send('Error fetching stocklist stocks');
@@ -535,7 +539,7 @@ app.get('/api/stocklist/:id/stocks', (req, res) => {
 
 // add stocks to stocklist (create stockholding if not exists)
 app.post('/api/add-to-stocklist', (req, res) => {
-  const { stockSymbol, numShares, stocklistId } = req.body;
+  const { stockSymbol, numShares, stocklistid } = req.body;
 
   const checkStockholdingQuery = 'SELECT stockholdingid FROM Stockholdings WHERE stocksymbol = $1 AND numshares = $2';
   client.query(checkStockholdingQuery, [stockSymbol, numShares], (err, result) => {
@@ -548,7 +552,7 @@ app.post('/api/add-to-stocklist', (req, res) => {
       const stockholdingId = result.rows[0].stockholdingid;
 
       const checkStocklistHoldingQuery = 'SELECT * FROM Stocklistholdings WHERE stocklistid = $1 AND stockholdingid = $2';
-      client.query(checkStocklistHoldingQuery, [stocklistId, stockholdingId], (err, result) => {
+      client.query(checkStocklistHoldingQuery, [stocklistid, stockholdingId], (err, result) => {
         if (err) {
           console.error('Error checking stocklistholding:', err);
           return res.status(500).send({ success: false, message: 'Error checking stocklistholding' });
@@ -559,7 +563,7 @@ app.post('/api/add-to-stocklist', (req, res) => {
         } else {
           
           const addStocklistHoldingQuery = 'INSERT INTO Stocklistholdings (stocklistid, stockholdingid) VALUES ($1, $2)';
-          client.query(addStocklistHoldingQuery, [stocklistId, stockholdingId], (err, result) => {
+          client.query(addStocklistHoldingQuery, [stocklistid, stockholdingId], (err, result) => {
             if (err) {
               console.error('Error adding stockholding to stocklist:', err);
               return res.status(500).send({ success: false, message: 'Error adding stockholding to stocklist' });
@@ -580,7 +584,7 @@ app.post('/api/add-to-stocklist', (req, res) => {
 
         const stockholdingId = result.rows[0].stockholdingid;
         const addStocklistHoldingQuery = 'INSERT INTO Stocklistholdings (stocklistid, stockholdingid) VALUES ($1, $2)';
-        client.query(addStocklistHoldingQuery, [stocklistId, stockholdingId], (err, result) => {
+        client.query(addStocklistHoldingQuery, [stocklistid, stockholdingId], (err, result) => {
           if (err) {
             console.error('Error adding stockholding to stocklist:', err);
             return res.status(500).send({ success: false, message: 'Error adding stockholding to stocklist' });
@@ -594,34 +598,34 @@ app.post('/api/add-to-stocklist', (req, res) => {
 });
 
 
-// fetch user's stocklists
-app.get('/api/stocklists', (req, res) => {
-  if (req.session.user) {
-    const email = req.session.user.email;
-    const query = 'SELECT * FROM Stocklists WHERE email = $1';
-    client.query(query, [email], (err, result) => {
-      if (err) {
-        console.error('Error executing query', err);
-        res.status(500).send('Error fetching stocklists');
-      } else {
-        res.json(result.rows);
-      }
-    });
-  } else {
-    res.status(401).send('Unauthorized');
-  }
-});
+  // fetch user's stocklists
+  app.get('/api/stocklists', (req, res) => {
+    if (req.session.user) {
+      const email = req.session.user.email;
+      const query = 'SELECT * FROM Stocklists WHERE email = $1';
+      client.query(query, [email], (err, result) => {
+        if (err) {
+          console.error('Error executing query', err);
+          res.status(500).send('Error fetching stocklists');
+        } else {
+          res.json(result.rows);
+        }
+      });
+    } else {
+      res.status(401).send('Unauthorized');
+    }
+  });
 
-// fetch stocklist details by id
-app.get('/api/stocklist/:id', (req, res) => {
-  const stocklistId = parseInt(req.params.id, 10);
+  // fetch stocklist details by id
+  app.get('/api/stocklist/:id', (req, res) => {
+    const stocklistid = parseInt(req.params.id, 10);
 
-  if (isNaN(stocklistId)) {
-    return res.status(400).send('Invalid stocklist ID');
-  }
+    if (isNaN(stocklistid)) {
+      return res.status(400).send('Invalid stocklist ID');
+    }
 
   const query = 'SELECT stocklistid, name, email AS owner, isPublic FROM Stocklists WHERE stocklistid = $1';
-  client.query(query, [stocklistId], (err, result) => {
+  client.query(query, [stocklistid], (err, result) => {
     if (err) {
       console.error('Error executing query', err);
       res.status(500).send('Error fetching stocklist details');
@@ -660,6 +664,231 @@ app.get('/api/public-stocklists', (req, res) => {
       res.redirect("/");
     }
   });
+
+  // get my reviews:
+  app.get("/api/my-reviews", (req, res) => {
+    if (req.session.user) {
+      const email = req.session.user.email;
+      const query = `
+        SELECT r.reviewID, r.reviewText, r.stocklistid, Users.name 
+        FROM Reviews r
+        JOIN StockLists ON r.stocklistid = StockLists.stocklistid 
+        JOIN Users ON StockLists.email = Users.email 
+        WHERE r.email = $1
+      `;
+      client.query(query, [email], (err, result) => {
+        if (err) {
+          console.error('Error executing query', err);
+          res.status(500).send('Error fetching reviews');
+        } else {
+          res.json(result.rows);
+        }
+      });
+    } else {
+      res.status(401).send('Unauthorized');
+    }
+  });
+
+  app.put('/api/reviews/:reviewId', (req, res) => {
+    if (!req.session.user) {
+      return res.status(401).send('Unauthorized');
+    }
+  
+    const reviewId = req.params.reviewId;
+    const { reviewText } = req.body;
+    const email = req.session.user.email;
+  
+    const query = `
+      UPDATE Reviews
+      SET reviewText = $1
+      WHERE reviewID = $2 AND email = $3
+      RETURNING *
+    `;
+  
+    client.query(query, [reviewText, reviewId, email], (err, result) => {
+      if (err) {
+        console.error('Error executing query', err);
+        return res.status(500).send('Error updating review');
+      }
+  
+      if (result.rowCount === 0) {
+        return res.status(404).send('Review not found or not owned by user');
+      }
+  
+      res.json(result.rows[0]);
+    });
+  });
+
+  app.delete('/api/reviews/:reviewId', (req, res) => {
+    if (!req.session.user) {
+      return res.status(401).send('Unauthorized');
+    }
+  
+    const reviewId = req.params.reviewId;
+    const email = req.session.user.email;
+  
+    const query = `
+      DELETE FROM Reviews
+      WHERE reviewID = $1 AND email = $2
+      RETURNING *
+    `;
+  
+    client.query(query, [reviewId, email], (err, result) => {
+      if (err) {
+        console.error('Error executing query', err);
+        return res.status(500).send('Error deleting review');
+      }
+  
+      if (result.rowCount === 0) {
+        return res.status(404).send('Review not found or not owned by user');
+      }
+  
+      res.json(result.rows[0]);
+    });
+  });
+
+  app.post("/api/request-review", (req, res) => {
+    if (req.session.user) {
+      const { email, stocklistid, reviewText } = req.body;
+  
+      // First, check if there is already a pending review request
+      const checkQuery = `
+        SELECT * FROM Reviews
+        WHERE email = $1 AND stocklistid = $2 AND reviewText = ''
+      `;
+  
+      client.query(checkQuery, [email, stocklistid], (err, result) => {
+        if (err) {
+          console.error("Error executing query", err);
+          res.status(500).send("Error checking existing review request");
+        } else if (result.rows.length > 0) { 
+          return res.status(200).json({ err: "Review request already exists" }); // Send JSON response
+        } else {
+          // If no existing request, insert the new review request
+          const insertQuery = `
+            INSERT INTO Reviews (email, stocklistid, reviewText)
+            VALUES ($1, $2, $3)
+            RETURNING *
+          `;
+  
+          client.query(insertQuery, [email, stocklistid, reviewText], (err, result) => {
+            if (err) {
+              console.error("Error executing query", err);
+              res.status(500).send("Error requesting review");
+            } else {
+              res.json(result.rows[0]);
+            }
+          });
+        }
+      });
+    } else {
+      res.status(401).send("Unauthorized");
+    }
+  });
+
+  // app.get("/api/reviews/", (req, res) => {
+  //   const stocklistid = req.query.stocklistid;
+  
+  //   const query = `
+  //     SELECT Reviews.reviewID, Reviews.reviewText, Users.name
+  //     FROM Reviews
+  //     JOIN Users ON Reviews.email = Users.email
+  //     WHERE Reviews.stocklistid = $1
+  //   `;
+  
+  //   client.query(query, [stocklistid], (err, result) => {
+  //     if (err) {
+  //       console.error("Error executing query", err);
+  //       res.status(500).send("Error fetching reviews");
+  //     } else {
+  //       res.json(result.rows);
+  //     }
+  //   });
+  // });
+
+  // add a review
+  app.post("/api/add-review", (req, res) => {
+    if (req.session.user) {
+      const email = req.session.user.email;
+      const { stocklistid, reviewtext } = req.body;
+  
+      // First, check if there is a pending review
+      const checkQuery = `
+        SELECT * FROM Reviews
+        WHERE email = $1 AND stocklistid = $2 AND reviewtext = '';
+      `;
+  
+      client.query(checkQuery, [email, stocklistid], (err, result) => {
+        if (err) {
+          console.error("Error executing query", err);
+          res.status(500).send("Error checking for pending review");
+        } else if (result.rows.length > 0) {
+          // If a pending review exists, update it
+          const updateQuery = `
+            UPDATE Reviews
+            SET reviewtext = $3
+            WHERE email = $1 AND stocklistid = $2 AND reviewtext = ''
+            RETURNING *;
+          `;
+  
+          client.query(updateQuery, [email, stocklistid, reviewtext], (err, result) => {
+            if (err) {
+              console.error("Error executing query", err);
+              res.status(500).send("Error updating review");
+            } else {
+              res.json(result.rows[0]);
+            }
+          });
+        } else {
+          // If no pending review exists, insert a new review
+          const insertQuery = `
+            INSERT INTO Reviews (email, stocklistid, reviewtext)
+            VALUES ($1, $2, $3)
+            RETURNING *;
+          `;
+  
+          client.query(insertQuery, [email, stocklistid, reviewtext], (err, result) => {
+            if (err) {
+              console.error("Error executing query", err);
+              res.status(500).send("Error adding review");
+            } else {
+              res.json(result.rows[0]);
+            }
+          });
+        }
+      });
+    } else {
+      res.status(401).send("Unauthorized");
+    }
+  });
+  
+  app.post("/api/stocklist-reviews", (req, res) => {
+    if (req.session.user) {
+      const { stocklistid } = req.body;
+  
+      const query = `
+        SELECT r.reviewtext, u.name AS name
+        FROM Reviews r
+        JOIN Users u ON r.email = u.email
+        WHERE r.stocklistid = $1;
+      `;
+  
+      client.query(query, [stocklistid], (err, results) => {
+        if (err) {
+          console.error("Error fetching stocklist reviews:", err);
+          res.status(500).send("Internal Server Error");
+        } else {
+          res.json({
+            reviews: results.rows,
+          });
+        }
+      });
+    } else {
+      res.status(401).send("Unauthorized");
+    }
+  });
+
+
 
   //see stocks
   app.get("/stocks", (req, res) => {
@@ -722,13 +951,45 @@ app.post('/api/add-stock-data', (req, res) => {
   });
 });
 
-
-
   app.get("/friends", (req, res) => {
     if (req.session.user) {
       res.sendFile(__dirname + "/friends.html");
     } else {
       res.redirect("/");
+    }
+  });
+
+  app.post('/api/delete-friend', (req, res) => {
+    if (req.session.user) {
+      const email = req.session.user.email;
+      const friendEmail = req.body.friendEmail;
+      const query = `
+        DELETE FROM Friends
+        WHERE (email1 = $1 AND email2 = $2) OR (email1 = $2 AND email2 = $1)
+      `;
+      client.query(query, [email, friendEmail], (err, result) => {
+        if (err) {
+          console.error('Error executing query', err);
+          res.status(500).send('Error deleting friend');
+        } else {
+          const insertDeclinedRequestQuery = `
+            INSERT INTO FriendRequests (requestemail, receiveemail, status, timestamp)
+            VALUES ($1, $2, 'declined', CURRENT_TIMESTAMP)
+          `;
+          client.query(insertDeclinedRequestQuery, [friendEmail, email], (err, result) => {
+            if (err) {
+              console.error('Error executing insert query', err);
+              res.status(500).send('Error adding declined friend request');
+            } else {
+              res.json({ message: 'Friend deleted and declined friend request added successfully' });
+            }
+          });
+          
+          // res.json({ message: 'Friend deleted successfully' });
+        }
+      });
+    } else {
+      res.status(401).send('Unauthorized');
     }
   });
 
@@ -765,10 +1026,18 @@ app.post('/api/add-stock-data', (req, res) => {
     if (req.session.user) {
       const { receiveemail } = req.body;
       const senderemail = req.session.user.email;
+
+      if (receiveemail  === senderemail) {  
+        return res.status(200).json({ error: 'You cannot send a friend request to yourself' });
+      }
+
+      if (!receiveemail) {
+        return res.status(400).json({ error: 'receiveemail is required' });
+      }
   
       const checkReciprocalQuery = `
         SELECT * FROM FriendRequests
-        WHERE requestemail = $1 AND receiveemail = $2 AND status = 'Pending'
+        WHERE requestemail = $1 AND receiveemail = $2 AND (status = 'Pending' OR status = 'Declined')
       `;
   
       client.query(checkReciprocalQuery, [receiveemail, senderemail], (err, result) => {
@@ -776,7 +1045,6 @@ app.post('/api/add-stock-data', (req, res) => {
           console.error('Error checking reciprocal friend request:', err);
           res.status(500).send('Internal Server Error');
         } else if (result.rows.length > 0) {
-          // Reciprocal friend request exists
           const addFriendsQuery = `
             INSERT INTO Friends (email1, email2)
             VALUES ($1, $2)
@@ -803,20 +1071,57 @@ app.post('/api/add-stock-data', (req, res) => {
             }
           });
         } else {
-          // No reciprocal friend request, insert new friend request
-          const insertRequestQuery = `
-            INSERT INTO FriendRequests (requestemail, receiveemail, status)
-            VALUES ($1, $2, 'Pending')
-            ON CONFLICT (requestemail, receiveemail) DO NOTHING
+          // Check if there is a declined friend request
+          const checkDeclinedRequestQuery = `
+          SELECT timestamp
+          FROM FriendRequests
+          WHERE requestemail = $1 AND receiveemail = $2 AND status = 'declined'
           `;
-  
-          client.query(insertRequestQuery, [senderemail, receiveemail], (err) => {
-            if (err) {
-              console.error('Error sending friend request:', err);
-              res.status(500).send('Internal Server Error');
+
+          client.query(checkDeclinedRequestQuery, [senderemail, receiveemail], (err, result) => {
+          if (err) {
+            console.error('Error checking declined friend request:', err);
+            res.status(500).send('Internal Server Error');
+          } else if (result.rows.length > 0) {
+            const declinedTimestamp = new Date(result.rows[0].timestamp);
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+            if (declinedTimestamp > fiveMinutesAgo) {
+              res.status(200).json({ error: 'This user declined your friend request or unfriended you less than 5 minutes ago.' });
             } else {
-              res.json({ message: 'Friend request sent' });
+              // Update the status to 'Pending'
+              const updateRequestQuery = `
+                UPDATE FriendRequests
+                SET status = 'Pending', timestamp = CURRENT_TIMESTAMP
+                WHERE requestemail = $1 AND receiveemail = $2
+              `;
+
+              client.query(updateRequestQuery, [senderemail, receiveemail], (err) => {
+                if (err) {
+                  console.error('Error updating friend request:', err);
+                  res.status(500).json({ error: 'Internal Server Error' });
+                } else {
+                  res.json({ message: 'Friend request sent' });
+                }
+              });
             }
+          } else {
+            // No reciprocal friend request, insert new friend request
+            const insertRequestQuery = `
+              INSERT INTO FriendRequests (requestemail, receiveemail, status)
+              VALUES ($1, $2, 'Pending')
+              ON CONFLICT (requestemail, receiveemail) DO NOTHING
+            `;
+
+            client.query(insertRequestQuery, [senderemail, receiveemail], (err) => {
+              if (err) {
+                console.error('Error sending friend request:', err);
+                res.status(500).send('Internal Server Error');
+              } else {
+                res.json({ message: 'Friend request sent' });
+              }
+            });
+          }
           });
         }
       });
@@ -896,7 +1201,7 @@ app.post('/api/add-stock-data', (req, res) => {
   
       const query = `
         UPDATE FriendRequests
-        SET status = 'declined'
+        SET status = 'declined', timestamp = CURRENT_TIMESTAMP
         WHERE requestEmail = $1 AND receiveEmail = $2
       `;
   
@@ -1495,7 +1800,7 @@ app.get('/api/predicted-portfolio/:id', async (req, res) => {
 
 // stocklist prediction
 app.get('/api/predicted-stocklist/:id', async (req, res) => {
-  const stocklistId = parseInt(req.params.id, 10);
+  const stocklistid = parseInt(req.params.id, 10);
 
   try {
     const stocklistResult = await client.query(`
@@ -1505,7 +1810,7 @@ app.get('/api/predicted-stocklist/:id', async (req, res) => {
       JOIN stockdata sd ON sd.code = sh.stocksymbol
       WHERE slh.stocklistid = $1
       ORDER BY sd.timestamp ASC
-    `, [stocklistId]);
+    `, [stocklistid]);
 
     const stocks = stocklistResult.rows;
     if (stocks.length === 0) {
